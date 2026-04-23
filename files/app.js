@@ -186,11 +186,13 @@ async function save() {
     localStorage.setItem('fl4', JSON.stringify(S));
     console.log('💾 Saved to localStorage');
     
-    // Sync to cloud if enabled
-    if (window.syncEnabled && window.syncEnabled() && window.pushToCloud) {
+    // Sync to cloud if enabled (check for window.pushToCloud function)
+    if (typeof window.pushToCloud === 'function') {
       const success = await window.pushToCloud();
       if (success) {
         console.log('☁️ Synced to cloud');
+      } else {
+        console.log('⚠️ Cloud sync failed, but local save OK');
       }
     }
   } catch (err) {

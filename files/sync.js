@@ -108,10 +108,28 @@ async function pullFromCloud() {
       // Use newer version
       if (cloudTime > localTime) {
         console.log('☁️ Cloud data is newer, pulling...');
-        window.S = data.data;
         
-        // Ensure tasks array exists
-        if (!window.S.tasks) window.S.tasks = [];
+        // Ensure migration fields exist
+        const cloudData = data.data;
+        if (!cloudData.remont) cloudData.remont = [];
+        if (!cloudData.zakupy) cloudData.zakupy = [];
+        if (!cloudData.otc) cloudData.otc = [];
+        if (!cloudData.tasks) cloudData.tasks = [];
+        
+        // Run migration if needed
+        if (cloudData.otc && cloudData.otc.length > 0 && cloudData.remont.length === 0) {
+          console.log('📦 Migrating cloud data: otc → remont');
+          cloudData.remont = cloudData.otc;
+          cloudData.zakupy = [];
+          cloudData.otc = [];
+        }
+        
+        // Update global S reference
+        if (window.S) {
+          Object.assign(window.S, cloudData);
+        } else {
+          window.S = cloudData;
+        }
         
         // Save to localStorage
         localStorage.setItem('fl4', JSON.stringify(window.S));
