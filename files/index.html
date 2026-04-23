@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Familock — System Zarządzania</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Space+Mono:wght@400;700&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="style.css"/>
+<!-- PDF.js for invoice parsing -->
+<script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
+<script>
+  // Configure PDF.js worker
+  if (typeof pdfjsLib !== 'undefined') {
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
+  }
+</script>
+<!-- Supabase SDK -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+
+<!-- ══ AUTH WALL ══════════════════════════════════════════════════ -->
+<div id="auth-wall" class="auth-wall">
+  <div class="auth-wall-content">
+    <div class="auth-wall-logo">
+      <div style="font-size:48px;font-weight:800;font-family:var(--ff);color:var(--ac1)">Familock</div>
+      <div style="font-size:14px;color:var(--txm);margin-top:8px">System Zarządzania Escape Room</div>
+    </div>
+    
+    <div class="auth-wall-box">
+      <div style="font-size:20px;font-weight:700;margin-bottom:8px">Zaloguj się</div>
+      <div style="font-size:12px;color:var(--txm);margin-bottom:24px">Aby zobaczyć swoje dane</div>
+      
+      <!-- Login Form -->
+      <div class="auth-form">
+        <div class="field">
+          <label>Email</label>
+          <input type="email" id="login-email" placeholder="twoj@email.pl" />
+        </div>
+        <div class="field">
+          <label>Hasło</label>
+          <input type="password" id="login-password" placeholder="••••••••" />
+        </div>
+        <button class="btn bp w100" onclick="handleAuthLogin()">Zaloguj się</button>
+        <div id="auth-login-error" class="auth-error"></div>
+      </div>
+    </div>
+    
+    <div style="font-size:11px;color:var(--txm);margin-top:24px;text-align:center">
+      🔒 Twoje dane są bezpieczne i szyfrowane
+    </div>
+  </div>
+</div>
+
+<!-- ── Main App (hidden until logged in) ── -->
+<div id="main-app" style="display:none">
+
+<!-- ── Sidebar ── -->
+<nav class="sb">
+  <div class="sb-brand"><div class="sb-logo">Familock</div><div class="sb-tag">Panel Zarządzania</div></div>
+  <div class="nav">
+    <div class="ni on" data-tab="dash"><span class="ni-ic">◈</span>Dashboard</div>
+    <div class="ni" data-tab="costs"><span class="ni-ic">◰</span>Koszty</div>
+    <div class="ni" data-tab="sessions"><span class="ni-ic">◎</span>Sesje</div>
+    <div class="ni" data-tab="analytics"><span class="ni-ic">◑</span>Analityka</div>
+    <div class="ni" data-tab="tasks"><span class="ni-ic">☐</span>Zadania</div>
+    <div class="ni" data-tab="settings"><span class="ni-ic">◧</span>Ustawienia</div>
+  </div>
+  <div class="sb-ft">Familock v4.1 + Cloud<br>Synchronizacja opcjonalna</div>
+</nav>
+
+<!-- ── Mobile nav ── -->
+<div class="mob-nav"><div class="mob-nav-items">
+  <button class="mni on" data-tab="dash"><span class="mni-ic">◈</span>Dash</button>
+  <button class="mni" data-tab="costs"><span class="mni-ic">◰</span>Koszty</button>
+  <button class="mni" data-tab="sessions"><span class="mni-ic">◎</span>Sesje</button>
+  <button class="mni" data-tab="analytics"><span class="mni-ic">◑</span>Analityka</button>
+  <button class="mni" data-tab="tasks"><span class="mni-ic">☐</span>Zadania</button>
+  <button class="mni" data-tab="settings"><span class="mni-ic">◧</span>Ustaw.</button>
+</div></div>
+
+<main class="main">
+
+<!-- ══ DASHBOARD ══════════════════════════════════════════════════ -->
+<div class="pg on" id="pg-dash">
+  <div class="ph"><div class="pt" id="d-name">Familock</div><div class="ps" id="d-date"></div></div>
+
+  <div class="kpig">
+    <div class="kpi"><div class="kpi-l">Łączne koszty</div><div class="kpi-v" id="k-costs">—</div></div>
+    <div class="kpi g"><div class="kpi-l">Przychody</div><div class="kpi-v" id="k-rev">—</div></div>
+    <div class="kpi" id="k-bal-card"><div class="kpi-l">Bilans</div><div class="kpi-v" id="k-bal">—</div></div>
+    <div class="kpi"><div class="kpi-l">Sesji ogółem</div><div class="kpi-v" id="k-sess">—</div></div>
+    <div class="kpi y"><div class="kpi-l">Śr. / sesja</div><div class="kpi-v" id="k-avg">—</div><div class="kpi-s" id="k-avg-disc"></div></div>
+    <div class="kpi b"><div class="kpi-l">Ten miesiąc</div><div class="kpi-v" id="k-thismonth">—</div><div class="kpi-s" id="k-thismonth-s"></div></div>
+  </div>
+
+  <div class="two-col">
+    <!-- Left column -->
+    <div>
+      <!-- Breakeven progress -->
+      <div class="card mb3">
+        <div class="ct"><span class="ct-ic">◈</span>Postęp zwrotu kosztów</div>
+        <div style="font-family:var(--fm);font-size:32px;font-weight:700;color:var(--ac2);line-height:1" id="d-pct">0%</div>
+        <div style="font-size:11px;color:var(--txm);margin:3px 0 9px">pokryto łącznymi przychodami</div>
+        <div class="prog-track" style="height:8px"><div class="prog-bar" id="d-progbar" style="width:0%"></div></div>
+        <div class="prog-labels mt3">
+          <span class="c-green" id="d-rev-lbl"></span><span id="d-cost-lbl"></span>
+        </div>
+        <hr class="div">
+        <div class="three-col" style="gap:7px">
+          <div class="sum-box" style="margin:0"><div class="sum-lbl">Przy 200 zł</div><div style="font-family:var(--fm);font-size:13px;font-weight:700" id="d-g200">—</div></div>
+          <div class="sum-box" style="margin:0"><div class="sum-lbl">Przy 220 zł</div><div style="font-family:var(--fm);font-size:13px;font-weight:700" id="d-g220">—</div></div>
+          <div class="sum-box" style="margin:0"><div class="sum-lbl">Przy 250 zł</div><div style="font-family:var(--fm);font-size:13px;font-weight:700" id="d-g250">—</div></div>
+        </div>
+      </div>
+
+      <!-- Month goal -->
+      <div class="card mb3">
+        <div class="ct"><span class="ct-ic">◎</span>Cel miesiąca</div>
+        <div id="d-month-goal"></div>
+      </div>
+
+      <!-- Forecast -->
+      <div class="card">
+        <div class="ct"><span class="ct-ic">◑</span>Prognoza zwrotu kosztów</div>
+        <div id="d-forecast"></div>
+      </div>
+    </div>
+
+    <!-- Right column -->
+    <div>
+      <div class="card mb3">
+        <div class="ct"><span class="ct-ic">◎</span>Ostatnie sesje</div>
+        <div id="d-recent"></div>
+        <div class="mt3"><button class="btn bg bsm w100" onclick="go('sessions')">Wszystkie sesje →</button></div>
+      </div>
+      <div class="card">
+        <div class="ct"><span class="ct-ic">☐</span>Otwarte zadania</div>
+        <div id="d-tasks"></div>
+        <div class="mt3"><button class="btn bg bsm w100" onclick="go('tasks')">Wszystkie zadania →</button></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card mt4">
+    <div class="ct"><span class="ct-ic">◑</span>Przychody miesięczne</div>
+    <div id="d-chart"></div>
+  </div>
+</div>
+
+<!-- ══ COSTS ════════════════════════════════════════════════════ -->
+<div class="pg" id="pg-costs">
+  <div class="ph"><div class="pt">Koszty</div><div class="ps">Czynsz z historią zmian stawek · Media z rozpisanymi wpisami · Koszty jednorazowe</div></div>
+  
+  <!-- PDF Import Zone -->
+  <div class="card mb4" style="background:linear-gradient(135deg,var(--s2),var(--s1));border:2px dashed var(--b3)">
+    <div class="ct"><span class="ct-ic">📄</span>Import faktur PDF</div>
+    
+    <div id="pdf-drop-zone" style="padding:16px;text-align:center;border-radius:var(--rs);transition:all var(--tr);cursor:pointer">
+      <div style="font-size:28px;margin-bottom:8px;opacity:0.6">📁</div>
+      <div style="font-size:13px;font-weight:600;color:var(--tx);margin-bottom:8px">
+        Przeciągnij faktury PDF tutaj
+      </div>
+      <label class="btn bp bsm" style="cursor:pointer">
+        📎 Lub wybierz pliki
+        <input type="file" id="pdf-file-input" accept=".pdf" multiple style="display:none"/>
+      </label>
+    </div>
+  </div>
+  
+  <div class="two-col">
+    <div>
+      <div class="card mb4">
+        <div class="ct"><span class="ct-ic">🏠</span>Czynsz — historia okresów</div>
+        <div id="rent-list"></div>
+        <div class="rp-add" id="rp-add">
+          <div style="font-size:10px;font-weight:700;color:var(--txm);margin-bottom:9px;text-transform:uppercase;letter-spacing:.09em">Nowy okres / zmiana stawki</div>
+          <div class="rp-add-grid">
+            <div class="field" style="margin:0"><label>Opis okresu</label><input type="text" id="rp-lbl" placeholder="np. kwi 2026 – …"/></div>
+            <div class="field" style="margin:0"><label>zł / mies.</label><input type="number" id="rp-rate" step="0.01" placeholder="1600"/></div>
+            <div class="field" style="margin:0"><label>Miesięcy</label><input type="number" id="rp-months" step="1" min="1" placeholder="12"/></div>
+            <div style="padding-bottom:1px;display:flex;gap:5px">
+              <button class="btn bp bsm" onclick="saveRP()">Dodaj</button>
+              <button class="btn bg bsm" onclick="$('rp-add').classList.remove('open')">✕</button>
+            </div>
+          </div>
+        </div>
+        <div class="mt3"><button class="btn bg bsm" onclick="$('rp-add').classList.add('open');$('rp-rate').focus()">+ Nowy okres / zmiana stawki</button></div>
+      </div>
+      <div class="card mb4">
+        <div class="ct frow"><span><span class="ct-ic">🔧</span>Obsługa lokalu (media)</span><button class="btn bg bsm" onclick="addUtil()">+ Dodaj</button></div>
+        <div class="util-list" id="util-list"></div>
+      </div>
+      <div class="card mb4">
+        <div class="ct frow"><span><span class="ct-ic">🏗️</span>Remont</span><button class="btn bg bsm" onclick="addRemont()">+ Dodaj</button></div>
+        <div id="remont-list"></div>
+      </div>
+      <div class="card">
+        <div class="ct frow"><span><span class="ct-ic">🛒</span>Zakupy</span><button class="btn bg bsm" onclick="addZakupy()">+ Dodaj</button></div>
+        <div id="zakupy-list"></div>
+      </div>
+    </div>
+    <div>
+      <div class="card" style="position:sticky;top:22px">
+        <div class="ct"><span class="ct-ic">◈</span>Podsumowanie</div>
+        <div class="sum-lbl">Łączny koszt ogółem</div>
+        <div class="sum-big" id="c-total">0 zł</div>
+        <div class="mt3 sum-box">
+          <div class="sum-row"><span class="sum-row-l">🔧 Obsługa (czynsz)</span><span class="sum-row-v" id="c-rent">—</span></div>
+          <div class="sum-row"><span class="sum-row-l">🔧 Obsługa (media)</span><span class="sum-row-v" id="c-util">—</span></div>
+          <div class="sum-row"><span class="sum-row-l">🏗️ Remont</span><span class="sum-row-v" id="c-remont">—</span></div>
+          <div class="sum-row"><span class="sum-row-l">🛒 Zakupy</span><span class="sum-row-v" id="c-zakupy">—</span></div>
+          <div class="sum-row"><span class="sum-row-l">Mies. czynszu</span><span class="sum-row-v" id="c-months">—</span></div>
+        </div>
+        <div style="font-size:10px;font-weight:700;color:var(--txm);text-transform:uppercase;letter-spacing:.09em;margin-bottom:7px">Ile gier do zwrotu</div>
+        <div id="c-games-table"></div>
+        <hr class="div">
+        <button class="btn bg bsm w100" onclick="copyCosts()">↓ Kopiuj zestawienie</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ SESSIONS ══════════════════════════════════════════════════ -->
+<div class="pg" id="pg-sessions">
+  <div class="ph frow">
+    <div><div class="pt">Sesje</div><div class="ps">Rejestr rozegranych gier · kliknij wiersz aby edytować</div></div>
+    <button class="btn bp" onclick="toggleSessAdd()">+ Dodaj sesję</button>
+  </div>
+  <div class="sess-add" id="sess-add">
+    <div style="font-size:10px;font-weight:700;color:var(--txm);margin-bottom:9px;text-transform:uppercase;letter-spacing:.09em">Nowa sesja</div>
+    <div class="sess-grid">
+      <div class="field" style="margin:0"><label>Data</label><input type="date" id="s-date"/></div>
+      <div class="field" style="margin:0"><label>Graczy</label><input type="number" id="s-players" min="1" max="16" placeholder="4"/></div>
+      <div class="field" style="margin:0"><label>Przychód (zł)</label><input type="number" id="s-rev" step="0.01" placeholder="220"/></div>
+      <div class="field" style="margin:0"><label>Rabat (zł)</label><input type="number" id="s-disc" step="0.01" placeholder="0" min="0"/></div>
+      <div class="field" style="margin:0"><label>Notatka</label><input type="text" id="s-note" placeholder="urodziny, bon, grupowy…"/></div>
+      <div style="padding-bottom:1px;display:flex;gap:5px">
+        <button class="btn bp bsm" onclick="saveSess()">Zapisz</button>
+        <button class="btn bg bsm" onclick="toggleSessAdd()">Anuluj</button>
+      </div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="frow mb3">
+      <div style="display:flex;gap:7px;align-items:center;flex-wrap:wrap">
+        <input type="month" id="s-filter" style="background:var(--s2);border:1px solid var(--b2);border-radius:var(--rs);padding:6px 11px;color:var(--tx);font-size:12px;outline:none" onchange="renderSessions()"/>
+        <button class="btn bg bsm" onclick="$('s-filter').value='';renderSessions()">Wszystkie</button>
+      </div>
+      <div id="s-sum" style="font-size:12px;color:var(--txm)"></div>
+    </div>
+    <div id="s-table"></div>
+  </div>
+</div>
+
+<!-- ══ ANALYTICS ═════════════════════════════════════════════════ -->
+<div class="pg" id="pg-analytics">
+  <div class="ph"><div class="pt">Analityka</div><div class="ps">Statystyki, trendy, rentowność</div></div>
+  <div class="kpig">
+    <div class="kpi g"><div class="kpi-l">Łączne przychody</div><div class="kpi-v" id="a-rev">—</div></div>
+    <div class="kpi"><div class="kpi-l">Sesji ogółem</div><div class="kpi-v" id="a-cnt">—</div></div>
+    <div class="kpi y"><div class="kpi-l">Śr. cena / sesja</div><div class="kpi-v" id="a-avg">—</div></div>
+    <div class="kpi"><div class="kpi-l">Śr. graczy</div><div class="kpi-v" id="a-pl">—</div></div>
+    <div class="kpi"><div class="kpi-l">Najlepszy mies.</div><div class="kpi-v" id="a-best">—</div></div>
+    <div class="kpi"><div class="kpi-l">Ten miesiąc</div><div class="kpi-v" id="a-now">—</div></div>
+  </div>
+  <!-- Trend row -->
+  <div class="card mb3" id="a-trend-card">
+    <div class="ct"><span class="ct-ic">◑</span>Trendy — ostatni pełny miesiąc vs poprzedni</div>
+    <div id="a-trends"></div>
+  </div>
+  <div class="two-col">
+    <div class="card"><div class="ct"><span class="ct-ic">◑</span>Przychody miesięczne</div><div id="a-revchart"></div></div>
+    <div class="card"><div class="ct"><span class="ct-ic">◑</span>Sesje miesięcznie</div><div id="a-sesschart"></div></div>
+  </div>
+  <div class="card mt4">
+    <div class="ct"><span class="ct-ic">◈</span>Analiza rentowności</div>
+    <div class="three-col" style="margin-bottom:14px">
+      <div class="sum-box" style="margin:0"><div class="sum-lbl">Koszty</div><div style="font-family:var(--fm);font-size:15px;font-weight:700" class="c-red" id="a-costs">—</div></div>
+      <div class="sum-box" style="margin:0"><div class="sum-lbl">Przychody</div><div style="font-family:var(--fm);font-size:15px;font-weight:700" class="c-green" id="a-rev2">—</div></div>
+      <div class="sum-box" style="margin:0"><div class="sum-lbl">Bilans</div><div style="font-family:var(--fm);font-size:15px;font-weight:700" id="a-bal">—</div></div>
+    </div>
+    <div class="prog-wrap">
+      <div class="prog-labels"><span>Pokryto kosztów</span><span id="a-pct">0%</span></div>
+      <div class="prog-track" style="height:9px"><div class="prog-bar" id="a-bar" style="width:0%"></div></div>
+    </div>
+    <div style="font-size:12px;color:var(--txm);margin-top:7px" id="a-needed"></div>
+  </div>
+  <div class="card mt4">
+    <div class="ct"><span class="ct-ic">◑</span>Prognoza break-even</div>
+    <div id="a-forecast"></div>
+  </div>
+</div>
+
+<!-- ══ TASKS ══════════════════════════════════════════════════════ -->
+<div class="pg" id="pg-tasks">
+  <div class="ph frow">
+    <div><div class="pt">Zadania</div><div class="ps">Lista rzeczy do zrobienia w lokalu</div></div>
+    <div style="font-size:12px;color:var(--txm)" id="tasks-counter"></div>
+  </div>
+  <div class="card">
+    <div class="task-input-row">
+      <input type="text" id="task-input" placeholder="Nowe zadanie… (Enter aby dodać)" onkeydown="if(event.key==='Enter')addTask()"/>
+      <select id="task-pri" class="task-pri-select" style="width:auto">
+        <option value="med">⚡ Średni</option>
+        <option value="high">🔴 Wysoki</option>
+        <option value="low">🟢 Niski</option>
+      </select>
+      <button class="btn bp bsm" onclick="addTask()">+ Dodaj</button>
+    </div>
+    <div class="tasks-filter">
+      <button class="tf-btn on" data-tf="all" onclick="setTaskFilter('all')">Wszystkie</button>
+      <button class="tf-btn" data-tf="open" onclick="setTaskFilter('open')">Otwarte</button>
+      <button class="tf-btn" data-tf="done" onclick="setTaskFilter('done')">Ukończone</button>
+    </div>
+    <div class="task-list" id="task-list"></div>
+  </div>
+</div>
+
+<!-- ══ SETTINGS ══════════════════════════════════════════════════ -->
+<div class="pg" id="pg-settings">
+  <div class="ph"><div class="pt">Ustawienia</div><div class="ps">Parametry kalkulacji i zarządzanie danymi</div></div>
+  <div class="two-col">
+    <div>
+      <div class="card mb4">
+        <div class="ct"><span class="ct-ic">◧</span>Parametry</div>
+        <div class="field"><label>Średni przychód za 1 grę (zł)</label><input type="number" id="cfg-avg" step="0.01" value="220" oninput="saveSettings()"/></div>
+        <div class="field"><label>Cel: sesji miesięcznie</label><input type="number" id="cfg-target" step="1" value="20" oninput="saveSettings()"/></div>
+        <div class="field"><label>Nazwa lokalu</label><input type="text" id="cfg-name" value="Familock" oninput="saveSettings()"/></div>
+        <div class="field"><label>Miasto</label><input type="text" id="cfg-loc" placeholder="np. Chorzów" oninput="saveSettings()"/></div>
+      </div>
+    </div>
+    <div>
+      <div class="card">
+        <div class="ct"><span class="ct-ic">◈</span>Dane</div>
+        <p style="font-size:12px;color:var(--txm);margin-bottom:13px;line-height:1.7">Dane w localStorage + chmura (gdy zalogowany). Eksportuj JSON jako kopię zapasową.</p>
+        <div style="display:flex;flex-direction:column;gap:7px">
+          <button class="btn bg w100" onclick="exportData()">↓ Eksportuj JSON</button>
+          <label class="btn bg w100" style="cursor:pointer;justify-content:center">↑ Importuj JSON<input type="file" accept=".json" style="display:none" onchange="importData(event)"/></label>
+          <hr class="div" style="margin:3px 0">
+          <button class="btn bd w100" style="justify-content:center;padding:8px" onclick="resetData()">⚠ Wyczyść wszystkie dane</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</main>
+</div><!-- end main-app -->
+
+<div class="toast" id="toast"></div>
+
+<!-- Scripts -->
+<!-- Invoice parser integrated in app.js -->
+<script src="sync.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
