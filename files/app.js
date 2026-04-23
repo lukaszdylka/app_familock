@@ -1976,7 +1976,7 @@ window.LOCKME = {
   companyId: '', // ID Twojej firmy w LockMe
   clientId: '', // Client ID z LockMe (opcjonalnie)
   clientSecret: '', // Client Secret z LockMe (opcjonalnie)
-  apiUrl: 'https://api.lockme.pl/v1',
+  apiUrl: 'https://api.lock.me/v1',
   proxyUrl: '', // Cloudflare Worker proxy URL (opcjonalnie - jeśli ustawione, używa proxy zamiast direct API)
   
   // Czy token jest ustawiony
