@@ -2157,8 +2157,9 @@ window.LOCKME = {
     }
     
     try {
-      const lockmeUrl = `${this.apiUrl}/companies/${this.companyId}/bookings?` + 
-                        `date_from=${dateFrom}&date_to=${dateTo}&status=completed`;
+      // CORRECTED: Use /rooms/{roomId}/reservations endpoint
+      const lockmeUrl = `${this.apiUrl}/rooms/${this.companyId}/reservations?` + 
+                        `date=${dateFrom}`;
       
       let url, headers;
       
@@ -2195,7 +2196,7 @@ window.LOCKME = {
       }
       
       const data = await response.json();
-      return data.bookings || [];
+      return data || [];
       
     } catch (error) {
       console.error('LockMe fetch error:', error);
