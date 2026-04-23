@@ -1977,6 +1977,7 @@ window.LOCKME = {
   clientId: '', // Client ID z LockMe (opcjonalnie)
   clientSecret: '', // Client Secret z LockMe (opcjonalnie)
   apiUrl: 'https://api.lockme.pl/v1',
+  proxyUrl: '', // Cloudflare Worker proxy URL (opcjonalnie - jeśli ustawione, używa proxy zamiast direct API)
   
   // Czy token jest ustawiony
   isConfigured() {
@@ -2132,9 +2133,10 @@ window.LOCKME = {
     this.refreshToken = localStorage.getItem('lockme_refresh_token') || '';
     this.tokenExpiry = parseInt(localStorage.getItem('lockme_token_expiry') || '0');
     this.companyId = localStorage.getItem('lockme_company_id') || '';
+    this.proxyUrl = localStorage.getItem('lockme_proxy_url') || '';
   },
   
-  // Pobierz sesje z LockMe (z auto-refresh)
+  // Pobierz sesje z LockMe (z auto-refresh i proxy support)
   async fetchSessions(dateFrom, dateTo) {
     if (!this.isConfigured()) {
       toast('Skonfiguruj LockMe API', 'err');
@@ -2155,15 +2157,29 @@ window.LOCKME = {
     }
     
     try {
-      const url = `${this.apiUrl}/companies/${this.companyId}/bookings?` + 
-                  `date_from=${dateFrom}&date_to=${dateTo}&status=completed`;
+      const lockmeUrl = `${this.apiUrl}/companies/${this.companyId}/bookings?` + 
+                        `date_from=${dateFrom}&date_to=${dateTo}&status=completed`;
       
-      const response = await fetch(url, {
-        headers: {
+      let url, headers;
+      
+      // Użyj proxy jeśli skonfigurowany (omija CORS)
+      if (this.proxyUrl) {
+        console.log('🔄 Using proxy:', this.proxyUrl);
+        url = `${this.proxyUrl}?url=${encodeURIComponent(lockmeUrl)}`;
+        headers = {
+          'X-LockMe-Token': this.accessToken,
+          'Content-Type': 'application/json'
+        };
+      } else {
+        // Direct API call (może mieć CORS issues)
+        url = lockmeUrl;
+        headers = {
           'Authorization': `Bearer ${this.accessToken}`,
           'Content-Type': 'application/json'
-        }
-      });
+        };
+      }
+      
+      const response = await fetch(url, { headers });
       
       if (!response.ok) {
         // Jeśli 401 - token invalid, spróbuj refresh
