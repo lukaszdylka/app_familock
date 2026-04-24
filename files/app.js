@@ -1284,30 +1284,51 @@ function parseCSV(text) {
   if (lines.length < 2) return [];
   
   // Parse header
-  const header = lines[0].split(/[,;|\t]/).map(h => h.trim().toLowerCase());
+  const header = lines[0].split(/[,;|\t]/).map(h => h.trim().toLowerCase().replace(/"/g, ''));
   
   // Find column indices
   const dateIdx = header.findIndex(h => h.includes('data') || h.includes('date'));
-  const playersIdx = header.findIndex(h => h.includes('gracz') || h.includes('player') || h.includes('osób'));
-  const revenueIdx = header.findIndex(h => 
-    h.includes('cena') || h.includes('price') || h.includes('przychód') || 
-    h.includes('kwota') || h.includes('amount') || h.includes('revenue')
+  const playersIdx = header.findIndex(h => 
+    h.includes('gracz') || h.includes('player') || h.includes('osób') || h.includes('people')
   );
-  const noteIdx = header.findIndex(h => h.includes('pokój') || h.includes('room') || h.includes('nazwa'));
+  const revenueIdx = header.findIndex(h => 
+    h.includes('income') || h.includes('przychód') || h.includes('revenue') ||
+    h.includes('cena') || h.includes('price') || h.includes('kwota') || h.includes('amount')
+  );
+  const noteIdx = header.findIndex(h => 
+    h.includes('pokój') || h.includes('room') || h.includes('nazwa') || h.includes('name')
+  );
   
   if (dateIdx === -1 || revenueIdx === -1) {
-    throw new Error('Nie znaleziono kolumn Data i Cena/Przychód');
+    throw new Error('Nie znaleziono kolumn Data i Income/Przychód');
   }
   
   const sessions = [];
   
   // Parse rows
   for (let i = 1; i < lines.length; i++) {
-    const cols = lines[i].split(/[,;|\t]/).map(c => c.trim().replace(/"/g, ''));
+    // Handle quoted fields properly
+    const line = lines[i];
+    const cols = [];
+    let current = '';
+    let inQuotes = false;
+    
+    for (let j = 0; j < line.length; j++) {
+      const char = line[j];
+      if (char === '"') {
+        inQuotes = !inQuotes;
+      } else if ((char === ',' || char === ';') && !inQuotes) {
+        cols.push(current.trim());
+        current = '';
+      } else {
+        current += char;
+      }
+    }
+    cols.push(current.trim());
     
     if (cols.length <= Math.max(dateIdx, revenueIdx)) continue;
     
-    // Parse date (try YYYY-MM-DD, DD-MM-YYYY, DD.MM.YYYY)
+    // Parse date (YYYY-MM-DD format from LockMe)
     let dateStr = cols[dateIdx];
     let date;
     
@@ -1320,16 +1341,17 @@ function parseCSV(text) {
       continue;
     }
     
-    // Parse revenue
+    // Parse revenue - strip all non-numeric except . and ,
     const revenueStr = cols[revenueIdx].replace(/[^\d.,]/g, '').replace(',', '.');
     const revenue = parseFloat(revenueStr) || 0;
     
+    // FILTER: Only import sessions with revenue > 0 (= actually paid)
     if (revenue <= 0) continue;
     
     // Parse players
     const players = playersIdx >= 0 ? parseInt(cols[playersIdx]) || 0 : 0;
     
-    // Parse note
+    // Parse note (room name from first column)
     const note = noteIdx >= 0 ? cols[noteIdx] : '';
     
     sessions.push({
