@@ -1122,7 +1122,7 @@ function renderSessions() {
   set('s-sum', `${filtered.length} sesji · ${fmtPLN(totalRev)} ${totalDisc > 0 ? `(rabaty: ${fmtPLN(totalDisc)})` : ''}`);
   
   if (filtered.length === 0) {
-    $('s-table').innerHTML = '<div class="empty"><div class="empty-ic">◎</div><div class="empty-tx">Brak sesji</div></div>';
+    $('s-table').innerHTML = '<div class="empty"><div class="empty-ic">◎</div><div class="empty-tx">Brak sesji<br><button class="btn" style="margin-top:12px" onclick="importCSV()">📄 Import CSV</button></div></div>';
     return;
   }
   
@@ -1162,7 +1162,9 @@ function renderSessions() {
           <td colspan="2">Razem</td>
           <td class="num">${fmtPLN(totalRev)}</td>
           <td class="num">${totalDisc > 0 ? `−${fmtPLN(totalDisc)}` : ''}</td>
-          <td colspan="2"></td>
+          <td colspan="2" style="text-align:right">
+            <button class="btn" onclick="importCSV()" style="font-size:11px;padding:4px 8px">📄 Import CSV</button>
+          </td>
         </tr>
       </tfoot>
     </table>
@@ -1223,6 +1225,124 @@ window.deleteSession = function(idx) {
   renderSessions();
   toast('Usunięto');
 };
+
+// ── CSV Import ──
+window.importCSV = function() {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.csv';
+  input.onchange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    
+    try {
+      const text = await file.text();
+      const sessions = parseCSV(text);
+      
+      if (sessions.length === 0) {
+        toast('Nie znaleziono sesji w CSV', 'err');
+        return;
+      }
+      
+      // Duplicate detection - check by date
+      let added = 0;
+      let skipped = 0;
+      
+      sessions.forEach(session => {
+        const exists = S.sessions.some(s => 
+          s.date === session.date && 
+          Math.abs(s.revenue - session.revenue) < 0.01
+        );
+        
+        if (!exists) {
+          S.sessions.push({
+            id: uid(),
+            ...session
+          });
+          added++;
+        } else {
+          skipped++;
+        }
+      });
+      
+      if (added > 0) {
+        save();
+        renderSessions();
+      }
+      
+      toast(`✓ Zaimportowano ${added} sesji${skipped > 0 ? ` (pominięto ${skipped} duplikatów)` : ''}`);
+    } catch (err) {
+      console.error('CSV import error:', err);
+      toast('Błąd parsowania CSV', 'err');
+    }
+  };
+  input.click();
+};
+
+function parseCSV(text) {
+  const lines = text.trim().split('\n').filter(l => l.trim());
+  if (lines.length < 2) return [];
+  
+  // Parse header
+  const header = lines[0].split(/[,;|\t]/).map(h => h.trim().toLowerCase());
+  
+  // Find column indices
+  const dateIdx = header.findIndex(h => h.includes('data') || h.includes('date'));
+  const playersIdx = header.findIndex(h => h.includes('gracz') || h.includes('player') || h.includes('osób'));
+  const revenueIdx = header.findIndex(h => 
+    h.includes('cena') || h.includes('price') || h.includes('przychód') || 
+    h.includes('kwota') || h.includes('amount') || h.includes('revenue')
+  );
+  const noteIdx = header.findIndex(h => h.includes('pokój') || h.includes('room') || h.includes('nazwa'));
+  
+  if (dateIdx === -1 || revenueIdx === -1) {
+    throw new Error('Nie znaleziono kolumn Data i Cena/Przychód');
+  }
+  
+  const sessions = [];
+  
+  // Parse rows
+  for (let i = 1; i < lines.length; i++) {
+    const cols = lines[i].split(/[,;|\t]/).map(c => c.trim().replace(/"/g, ''));
+    
+    if (cols.length <= Math.max(dateIdx, revenueIdx)) continue;
+    
+    // Parse date (try YYYY-MM-DD, DD-MM-YYYY, DD.MM.YYYY)
+    let dateStr = cols[dateIdx];
+    let date;
+    
+    if (/^\d{4}-\d{2}-\d{2}/.test(dateStr)) {
+      date = dateStr.substring(0, 10);
+    } else if (/^\d{2}[-./]\d{2}[-./]\d{4}/.test(dateStr)) {
+      const parts = dateStr.split(/[-./]/);
+      date = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+    } else {
+      continue;
+    }
+    
+    // Parse revenue
+    const revenueStr = cols[revenueIdx].replace(/[^\d.,]/g, '').replace(',', '.');
+    const revenue = parseFloat(revenueStr) || 0;
+    
+    if (revenue <= 0) continue;
+    
+    // Parse players
+    const players = playersIdx >= 0 ? parseInt(cols[playersIdx]) || 0 : 0;
+    
+    // Parse note
+    const note = noteIdx >= 0 ? cols[noteIdx] : '';
+    
+    sessions.push({
+      date,
+      players,
+      revenue,
+      discount: 0,
+      note
+    });
+  }
+  
+  return sessions;
+}
 
 // ═══════════════════════════════════════════════════════════════
 //  ANALYTICS
