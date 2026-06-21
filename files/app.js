@@ -41,7 +41,7 @@ window.handleAuthLogin = async function() {
 window.showApp = function() {
   console.log('✅ Showing app (user logged in)');
   document.getElementById('auth-wall').style.display = 'none';
-  document.getElementById('main-app').style.display = 'block';
+  document.getElementById('main-app').style.display = 'flex';
 };
 
 window.hideApp = function() {
