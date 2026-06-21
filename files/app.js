@@ -2152,7 +2152,11 @@ window.go = function(tab) {
     }, 100);
   }
 };
-
+// Keep-alive ping every 6 days
+setInterval(async () => {
+  await supabase.from('sessions').select(...)
+  console.log('✅ Keep-alive ping sent')
+}, 6 * 24 * 60 * 60 * 1000)
 // Setup on page load
 setTimeout(() => {
   // Setup PDF drop zone if costs tab is active
