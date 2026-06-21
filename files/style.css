@@ -306,6 +306,22 @@ body {
   display: block;
 }
 
+/* Keep content readable — cap width so "label ........ value" rows
+   don't stretch across the whole screen. Centered within .main. */
+.pg.on {
+  max-width: 1150px;
+}
+
+/* Costs uses a 2-column layout, so it gets more room */
+#pg-costs.on {
+  max-width: 1500px;
+}
+
+/* Analytics has charts that benefit from width */
+#pg-analytics.on {
+  max-width: 1400px;
+}
+
 /* ── Cards ── */
 .card {
   background: var(--s1);
