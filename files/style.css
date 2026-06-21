@@ -264,8 +264,8 @@ body {
   margin-left: var(--sw);
   flex: 1;
   min-height: 100vh;
-  padding: 24px 20px 60px;
-  width: 100%;
+  padding: 26px 30px 60px;
+  max-width: calc(100vw - var(--sw));
 }
 
 .ph {
@@ -590,7 +590,7 @@ button, .btn {
 /* ── Layout ── */
 .two-col {
   display: grid;
-  grid-template-columns: 2fr 1fr;
+  grid-template-columns: 1.35fr 1fr;
   gap: 16px;
   align-items: start;
 }
@@ -1136,6 +1136,124 @@ hr.div {
   align-items: end;
 }
 
+/* ── Debts ── */
+.debt-grid {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr 1fr 1fr 1.4fr auto;
+  gap: 9px;
+  align-items: end;
+}
+
+.debt-item {
+  background: var(--s2);
+  border: 1px solid var(--b2);
+  border-radius: var(--r);
+  padding: 14px 16px;
+  margin-bottom: 11px;
+  transition: all var(--tr);
+}
+
+.debt-item.paid {
+  opacity: 0.62;
+  border-color: var(--ok, #16a34a);
+}
+
+.debt-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.debt-creditor {
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--tx);
+  flex: 1;
+  min-width: 140px;
+}
+
+.debt-badge {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  padding: 3px 8px;
+  border-radius: 99px;
+}
+
+.debt-badge.active { background: rgba(234,179,8,.15); color: #eab308; }
+.debt-badge.partial { background: rgba(59,130,246,.15); color: #3b82f6; }
+.debt-badge.done { background: rgba(34,197,94,.15); color: #22c55e; }
+.debt-badge.overdue { background: rgba(239,68,68,.15); color: #ef4444; }
+
+.debt-amounts {
+  display: flex;
+  gap: 18px;
+  margin-top: 9px;
+  flex-wrap: wrap;
+}
+
+.debt-amt-box {
+  font-size: 12px;
+}
+.debt-amt-box .lbl {
+  color: var(--txm);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  display: block;
+  margin-bottom: 2px;
+}
+.debt-amt-box .val {
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--tx);
+}
+.debt-amt-box .val.rem { color: #ef4444; }
+.debt-amt-box .val.ok { color: #22c55e; }
+
+.debt-progress {
+  height: 7px;
+  background: var(--s1);
+  border-radius: 99px;
+  overflow: hidden;
+  margin-top: 11px;
+}
+.debt-progress-bar {
+  height: 100%;
+  background: linear-gradient(90deg, #3b82f6, #22c55e);
+  border-radius: 99px;
+  transition: width var(--tr);
+}
+
+.debt-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+
+.debt-pay-row {
+  display: flex;
+  gap: 7px;
+  margin-top: 11px;
+  padding-top: 11px;
+  border-top: 1px solid var(--b2);
+  align-items: end;
+}
+
+.debt-edit {
+  display: none;
+  grid-template-columns: 1.4fr 1fr 1fr 1.4fr;
+  gap: 9px;
+  margin-top: 11px;
+  padding-top: 11px;
+  border-top: 1px solid var(--b2);
+  align-items: end;
+}
+.debt-edit.open { display: grid; }
+
 .sess-edit-row {
   background: var(--s2);
   border-bottom: 1px solid var(--b2);
@@ -1413,6 +1531,14 @@ hr.div {
     grid-template-columns: 1fr 1fr;
   }
   
+  .debt-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+  
+  .debt-edit {
+    grid-template-columns: 1fr 1fr;
+  }
+  
   .rp-edit {
     grid-template-columns: 1fr 1fr;
   }
@@ -1441,100 +1567,5 @@ hr.div {
   
   .task-input-row {
     grid-template-columns: 1fr auto;
-  }
-}
-
-/* ════════════════════════════════════════════════════════════════
-   FIX: Przycisk "Dodaj sesję" zakryty przez widget sync
-   ════════════════════════════════════════════════════════════════ */
-
-#pg-sessions .ph.frow {
-  padding-right: 200px;
-}
-
-@media (max-width: 768px) {
-  #pg-sessions .ph.frow {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 12px;
-    padding-right: 18px;
-  }
-  
-  #pg-sessions .ph.frow > button {
-    width: 100%;
-  }
-}
-
-/* PDF drop zone highlight effect */
-#pdf-drop-zone.highlight {
-  background: var(--acg);
-  border-color: var(--ac);
-  transform: scale(1.02);
-}
-
-/* ════════════════════════════════════════════════════════════════
-   AUTH WALL - Full screen login before app access
-   ════════════════════════════════════════════════════════════════ */
-
-.auth-wall {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: linear-gradient(135deg, var(--bg) 0%, var(--bgs) 100%);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 10000;
-}
-
-.auth-wall-content {
-  max-width: 420px;
-  width: 100%;
-  padding: 24px;
-}
-
-.auth-wall-logo {
-  text-align: center;
-  margin-bottom: 48px;
-}
-
-.auth-wall-box {
-  background: var(--bgs);
-  border: 1px solid var(--bd);
-  border-radius: 12px;
-  padding: 32px;
-  box-shadow: 0 4px 24px rgba(0,0,0,0.1);
-}
-
-.auth-form {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.auth-error {
-  font-size: 12px;
-  color: #ff4444;
-  margin-top: -8px;
-  min-height: 18px;
-}
-
-@media (max-width: 480px) {
-  .auth-wall-content {
-    padding: 16px;
-  }
-  
-  .auth-wall-box {
-    padding: 24px;
-  }
-  
-  .auth-wall-logo {
-    margin-bottom: 32px;
-  }
-  
-  .auth-wall-logo div:first-child {
-    font-size: 36px !important;
   }
 }

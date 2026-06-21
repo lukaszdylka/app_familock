@@ -115,6 +115,7 @@ async function pullFromCloud() {
         if (!cloudData.zakupy) cloudData.zakupy = [];
         if (!cloudData.otc) cloudData.otc = [];
         if (!cloudData.tasks) cloudData.tasks = [];
+        if (!cloudData.debts) cloudData.debts = [];
         
         // Run migration if needed
         if (cloudData.otc && cloudData.otc.length > 0 && cloudData.remont.length === 0) {

@@ -65,6 +65,7 @@
     <div class="ni" data-tab="sessions"><span class="ni-ic">◎</span>Sesje</div>
     <div class="ni" data-tab="analytics"><span class="ni-ic">◑</span>Analityka</div>
     <div class="ni" data-tab="tasks"><span class="ni-ic">☐</span>Zadania</div>
+    <div class="ni" data-tab="debts"><span class="ni-ic">⚖</span>Długi</div>
     <div class="ni" data-tab="settings"><span class="ni-ic">◧</span>Ustawienia</div>
   </div>
   <div class="sb-ft">Familock v4.1 + Cloud<br>Synchronizacja opcjonalna</div>
@@ -77,6 +78,7 @@
   <button class="mni" data-tab="sessions"><span class="mni-ic">◎</span>Sesje</button>
   <button class="mni" data-tab="analytics"><span class="mni-ic">◑</span>Analityka</button>
   <button class="mni" data-tab="tasks"><span class="mni-ic">☐</span>Zadania</button>
+  <button class="mni" data-tab="debts"><span class="mni-ic">⚖</span>Długi</button>
   <button class="mni" data-tab="settings"><span class="mni-ic">◧</span>Ustaw.</button>
 </div></div>
 
@@ -169,55 +171,54 @@
     </div>
   </div>
   
-  <div class="two-col">
-    <div>
-      <div class="card mb4">
-        <div class="ct"><span class="ct-ic">🏠</span>Czynsz — historia okresów</div>
-        <div id="rent-list"></div>
-        <div class="rp-add" id="rp-add">
-          <div style="font-size:10px;font-weight:700;color:var(--txm);margin-bottom:9px;text-transform:uppercase;letter-spacing:.09em">Nowy okres / zmiana stawki</div>
-          <div class="rp-add-grid">
-            <div class="field" style="margin:0"><label>Opis okresu</label><input type="text" id="rp-lbl" placeholder="np. kwi 2026 – …"/></div>
-            <div class="field" style="margin:0"><label>zł / mies.</label><input type="number" id="rp-rate" step="0.01" placeholder="1600"/></div>
-            <div class="field" style="margin:0"><label>Miesięcy</label><input type="number" id="rp-months" step="1" min="1" placeholder="12"/></div>
-            <div style="padding-bottom:1px;display:flex;gap:5px">
-              <button class="btn bp bsm" onclick="saveRP()">Dodaj</button>
-              <button class="btn bg bsm" onclick="$('rp-add').classList.remove('open')">✕</button>
-            </div>
+  <!-- Summary Card First -->
+  <div class="card mb4" style="max-width:600px">
+    <div class="ct"><span class="ct-ic">◈</span>Podsumowanie</div>
+    <div class="sum-lbl">Łączny koszt ogółem</div>
+    <div class="sum-big" id="c-total">0 zł</div>
+    <div class="mt3 sum-box">
+      <div class="sum-row"><span class="sum-row-l">🔧 Obsługa (czynsz)</span><span class="sum-row-v" id="c-rent">—</span></div>
+      <div class="sum-row"><span class="sum-row-l">🔧 Obsługa (media)</span><span class="sum-row-v" id="c-util">—</span></div>
+      <div class="sum-row"><span class="sum-row-l">🏗️ Remont</span><span class="sum-row-v" id="c-remont">—</span></div>
+      <div class="sum-row"><span class="sum-row-l">🛒 Zakupy</span><span class="sum-row-v" id="c-zakupy">—</span></div>
+      <div class="sum-row"><span class="sum-row-l">Mies. czynszu</span><span class="sum-row-v" id="c-months">—</span></div>
+    </div>
+    <div style="font-size:10px;font-weight:700;color:var(--txm);text-transform:uppercase;letter-spacing:.09em;margin-bottom:7px;margin-top:14px">Ile gier do zwrotu</div>
+    <div id="c-games-table"></div>
+    <hr class="div">
+    <button class="btn bg bsm w100" onclick="copyCosts()">↓ Kopiuj zestawienie</button>
+  </div>
+  
+  <!-- Full width content -->
+  <div>
+    <div class="card mb4">
+      <div class="ct"><span class="ct-ic">🏠</span>Czynsz — historia okresów</div>
+      <div id="rent-list"></div>
+      <div class="rp-add" id="rp-add">
+        <div style="font-size:10px;font-weight:700;color:var(--txm);margin-bottom:9px;text-transform:uppercase;letter-spacing:.09em">Nowy okres / zmiana stawki</div>
+        <div class="rp-add-grid">
+          <div class="field" style="margin:0"><label>Opis okresu</label><input type="text" id="rp-lbl" placeholder="np. kwi 2026 – …"/></div>
+          <div class="field" style="margin:0"><label>zł / mies.</label><input type="number" id="rp-rate" step="0.01" placeholder="1600"/></div>
+          <div class="field" style="margin:0"><label>Miesięcy</label><input type="number" id="rp-months" step="1" min="1" placeholder="12"/></div>
+          <div style="padding-bottom:1px;display:flex;gap:5px">
+            <button class="btn bp bsm" onclick="saveRP()">Dodaj</button>
+            <button class="btn bg bsm" onclick="$('rp-add').classList.remove('open')">✕</button>
           </div>
         </div>
-        <div class="mt3"><button class="btn bg bsm" onclick="$('rp-add').classList.add('open');$('rp-rate').focus()">+ Nowy okres / zmiana stawki</button></div>
       </div>
-      <div class="card mb4">
-        <div class="ct frow"><span><span class="ct-ic">🔧</span>Obsługa lokalu (media)</span><button class="btn bg bsm" onclick="addUtil()">+ Dodaj</button></div>
-        <div class="util-list" id="util-list"></div>
-      </div>
-      <div class="card mb4">
-        <div class="ct frow"><span><span class="ct-ic">🏗️</span>Remont</span><button class="btn bg bsm" onclick="addRemont()">+ Dodaj</button></div>
-        <div id="remont-list"></div>
-      </div>
-      <div class="card">
-        <div class="ct frow"><span><span class="ct-ic">🛒</span>Zakupy</span><button class="btn bg bsm" onclick="addZakupy()">+ Dodaj</button></div>
-        <div id="zakupy-list"></div>
-      </div>
+      <div class="mt3"><button class="btn bg bsm" onclick="$('rp-add').classList.add('open');$('rp-rate').focus()">+ Nowy okres / zmiana stawki</button></div>
     </div>
-    <div>
-      <div class="card" style="position:sticky;top:22px">
-        <div class="ct"><span class="ct-ic">◈</span>Podsumowanie</div>
-        <div class="sum-lbl">Łączny koszt ogółem</div>
-        <div class="sum-big" id="c-total">0 zł</div>
-        <div class="mt3 sum-box">
-          <div class="sum-row"><span class="sum-row-l">🔧 Obsługa (czynsz)</span><span class="sum-row-v" id="c-rent">—</span></div>
-          <div class="sum-row"><span class="sum-row-l">🔧 Obsługa (media)</span><span class="sum-row-v" id="c-util">—</span></div>
-          <div class="sum-row"><span class="sum-row-l">🏗️ Remont</span><span class="sum-row-v" id="c-remont">—</span></div>
-          <div class="sum-row"><span class="sum-row-l">🛒 Zakupy</span><span class="sum-row-v" id="c-zakupy">—</span></div>
-          <div class="sum-row"><span class="sum-row-l">Mies. czynszu</span><span class="sum-row-v" id="c-months">—</span></div>
-        </div>
-        <div style="font-size:10px;font-weight:700;color:var(--txm);text-transform:uppercase;letter-spacing:.09em;margin-bottom:7px">Ile gier do zwrotu</div>
-        <div id="c-games-table"></div>
-        <hr class="div">
-        <button class="btn bg bsm w100" onclick="copyCosts()">↓ Kopiuj zestawienie</button>
-      </div>
+    <div class="card mb4">
+      <div class="ct frow"><span><span class="ct-ic">🔧</span>Obsługa lokalu (media)</span><button class="btn bg bsm" onclick="addUtil()">+ Dodaj</button></div>
+      <div class="util-list" id="util-list"></div>
+    </div>
+    <div class="card mb4">
+      <div class="ct frow"><span><span class="ct-ic">🏗️</span>Remont</span><button class="btn bg bsm" onclick="addRemont()">+ Dodaj</button></div>
+      <div id="remont-list"></div>
+    </div>
+    <div class="card">
+      <div class="ct frow"><span><span class="ct-ic">🛒</span>Zakupy</span><button class="btn bg bsm" onclick="addZakupy()">+ Dodaj</button></div>
+      <div id="zakupy-list"></div>
     </div>
   </div>
 </div>
@@ -315,6 +316,48 @@
       <button class="tf-btn" data-tf="done" onclick="setTaskFilter('done')">Ukończone</button>
     </div>
     <div class="task-list" id="task-list"></div>
+  </div>
+</div>
+
+<!-- ══ DEBTS ═════════════════════════════════════════════════════ -->
+<div class="pg" id="pg-debts">
+  <div class="ph frow">
+    <div><div class="pt">Długi</div><div class="ps">Komu zalegam · ile · termin spłaty · postęp spłat</div></div>
+    <button class="btn bp" onclick="toggleDebtAdd()">+ Dodaj dług</button>
+  </div>
+
+  <!-- Summary -->
+  <div class="card mb4" style="max-width:600px">
+    <div class="ct"><span class="ct-ic">⚖</span>Podsumowanie</div>
+    <div class="sum-lbl">Pozostało do spłaty</div>
+    <div class="sum-big" id="d-remaining">0 zł</div>
+    <div class="mt3 sum-box">
+      <div class="sum-row"><span class="sum-row-l">Łączna kwota długów</span><span class="sum-row-v" id="d-total">—</span></div>
+      <div class="sum-row"><span class="sum-row-l">Już spłacono</span><span class="sum-row-v" id="d-paid">—</span></div>
+      <div class="sum-row"><span class="sum-row-l">Aktywne długi</span><span class="sum-row-v" id="d-active">—</span></div>
+      <div class="sum-row"><span class="sum-row-l">Spłacone</span><span class="sum-row-v" id="d-done">—</span></div>
+    </div>
+  </div>
+
+  <!-- Add form -->
+  <div class="sess-add" id="debt-add">
+    <div style="font-size:10px;font-weight:700;color:var(--txm);margin-bottom:9px;text-transform:uppercase;letter-spacing:.09em">Nowy dług</div>
+    <div class="debt-grid">
+      <div class="field" style="margin:0"><label>Komu zalegam</label><input type="text" id="d-creditor" placeholder="np. Jan Kowalski / Bank X"/></div>
+      <div class="field" style="margin:0"><label>Kwota (zł)</label><input type="number" id="d-amount" step="0.01" placeholder="1000"/></div>
+      <div class="field" style="margin:0"><label>Już spłacone (zł)</label><input type="number" id="d-paid-init" step="0.01" placeholder="0" min="0"/></div>
+      <div class="field" style="margin:0"><label>Termin spłaty</label><input type="date" id="d-due"/></div>
+      <div class="field" style="margin:0"><label>Notatka</label><input type="text" id="d-note" placeholder="np. pożyczka na remont"/></div>
+      <div style="padding-bottom:1px;display:flex;gap:5px">
+        <button class="btn bp bsm" onclick="saveDebt()">Zapisz</button>
+        <button class="btn bg bsm" onclick="toggleDebtAdd()">Anuluj</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- List -->
+  <div class="card">
+    <div id="debt-list"></div>
   </div>
 </div>
 

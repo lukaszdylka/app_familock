@@ -90,6 +90,7 @@ const DEF = {
   otc: [], // Legacy - kept for backward compatibility
   sessions: [],
   tasks: [],
+  debts: [],
   settings: {
     avgGame: 220,
     targetSessions: 20,
@@ -123,6 +124,8 @@ try {
     
     // Ensure tasks array exists
     if (!S.tasks) S.tasks = [];
+    // Ensure debts array exists
+    if (!S.debts) S.debts = [];
     console.log('✓ Data loaded:', S.sessions?.length || 0, 'sessions');
   } else {
     S = JSON.parse(JSON.stringify(DEF));
@@ -257,6 +260,7 @@ function renderTab(tab) {
     sessions: renderSessions,
     analytics: renderAnalytics,
     tasks: renderTasks,
+    debts: renderDebts,
     settings: renderSettings
   };
   
@@ -586,7 +590,10 @@ function renderRentList() {
             <div class="rp-name">${esc(p.label)}</div>
             <div class="rp-detail">${fmtPLN(p.rate)}/mies. × ${p.months} mies.</div>
           </div>
-          <button class="btn be" onclick="editRP(${idx})">✎</button>
+          <div style="display:flex;gap:5px">
+            <button class="btn bg bsm" onclick="addRentMonth(${idx})" title="Dodaj kolejny miesiąc tej samej stawki">+1 mies.</button>
+            <button class="btn be" onclick="editRP(${idx})">✎</button>
+          </div>
           <div class="rp-total">${fmtPLN(p.rate * p.months)}</div>
         </div>
         <div class="rp-edit" id="rp-edit-${idx}" style="display:none">
@@ -610,6 +617,13 @@ window.editRP = function(idx) {
   document.querySelectorAll('[id^="rp-edit-"]').forEach(e => e.style.display = 'none');
   const edit = $(`rp-edit-${idx}`);
   if (edit) edit.style.display = 'grid';
+};
+
+window.addRentMonth = function(idx) {
+  S.rentPeriods[idx].months = (parseInt(S.rentPeriods[idx].months) || 0) + 1;
+  save();
+  renderCosts();
+  toast(`+1 miesiąc · teraz ${S.rentPeriods[idx].months} mies.`);
 };
 
 window.cancelEditRP = function(idx) {
@@ -701,7 +715,8 @@ function renderUtilEntries(uidx, util) {
           ${e.type === 'period' ? `${esc(e.label)} (${fmtPLN(e.rate)}/mies. × ${e.months})` : esc(e.label)}
         </div>
         <div class="ue-amt">${fmtPLN(amt)}</div>
-        <div>
+        <div style="display:flex;gap:4px">
+          ${e.type === 'period' ? `<button class="btn bg bsm" onclick="addUtilMonth(${uidx},${eidx})" title="Dodaj kolejny miesiąc">+1 mies.</button>` : ''}
           <button class="btn be" onclick="editUE(${uidx},${eidx})">✎</button>
           <button class="btn bd" onclick="deleteUE(${uidx},${eidx})">✕</button>
         </div>
@@ -822,6 +837,16 @@ window.deleteUE = function(uidx, eidx) {
   save();
   renderCosts();
   toast('Usunięto');
+};
+
+window.addUtilMonth = function(uidx, eidx) {
+  const entry = S.utilities[uidx].entries[eidx];
+  if (entry && entry.type === 'period') {
+    entry.months = (parseInt(entry.months) || 0) + 1;
+    save();
+    renderCosts();
+    toast(`+1 miesiąc · teraz ${entry.months} mies.`);
+  }
 };
 
 // REMONT
@@ -1367,8 +1392,215 @@ function parseCSV(text) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  ANALYTICS
+//  DEBTS (Długi)
 // ═══════════════════════════════════════════════════════════════
+
+function debtStatus(d) {
+  const amount = Number(d.amount) || 0;
+  const paid = Number(d.paid) || 0;
+  if (paid >= amount && amount > 0) return 'done';
+  if (paid > 0) {
+    // Check overdue
+    if (d.dueDate && new Date(d.dueDate) < new Date(new Date().toDateString())) return 'overdue';
+    return 'partial';
+  }
+  if (d.dueDate && new Date(d.dueDate) < new Date(new Date().toDateString())) return 'overdue';
+  return 'active';
+}
+
+const DEBT_STATUS_LABEL = {
+  active: 'Aktywny',
+  partial: 'Częściowo',
+  done: 'Spłacony',
+  overdue: 'Po terminie'
+};
+
+function renderDebts() {
+  // Summary
+  const total = S.debts.reduce((s, d) => s + (Number(d.amount) || 0), 0);
+  const paidSum = S.debts.reduce((s, d) => s + (Number(d.paid) || 0), 0);
+  const remaining = total - paidSum;
+  const activeCount = S.debts.filter(d => debtStatus(d) !== 'done').length;
+  const doneCount = S.debts.filter(d => debtStatus(d) === 'done').length;
+
+  set('d-remaining', fmtPLN(remaining));
+  set('d-total', fmtPLN(total));
+  set('d-paid', fmtPLN(paidSum));
+  set('d-active', String(activeCount));
+  set('d-done', String(doneCount));
+
+  const list = $('debt-list');
+  if (!list) return;
+
+  if (S.debts.length === 0) {
+    list.innerHTML = '<div class="empty"><div class="empty-ic">⚖</div><div class="empty-tx">Brak długów<br><button class="btn" style="margin-top:12px" onclick="toggleDebtAdd()">+ Dodaj pierwszy dług</button></div></div>';
+    return;
+  }
+
+  // Sort: active/overdue first, then by due date
+  const sorted = [...S.debts].sort((a, b) => {
+    const sa = debtStatus(a), sb = debtStatus(b);
+    if (sa === 'done' && sb !== 'done') return 1;
+    if (sa !== 'done' && sb === 'done') return -1;
+    return (a.dueDate || '9999').localeCompare(b.dueDate || '9999');
+  });
+
+  list.innerHTML = sorted.map(d => {
+    const origIdx = S.debts.indexOf(d);
+    const amount = Number(d.amount) || 0;
+    const paid = Number(d.paid) || 0;
+    const remaining = amount - paid;
+    const pct = amount > 0 ? Math.min(100, (paid / amount) * 100) : 0;
+    const status = debtStatus(d);
+    const isPaid = status === 'done';
+
+    const dueText = d.dueDate
+      ? new Date(d.dueDate).toLocaleDateString('pl-PL', { day: 'numeric', month: 'short', year: 'numeric' })
+      : '—';
+
+    return `
+      <div class="debt-item ${isPaid ? 'paid' : ''}">
+        <div class="debt-head">
+          <div class="debt-creditor">${esc(d.creditor || 'Bez nazwy')}</div>
+          <span class="debt-badge ${status}">${DEBT_STATUS_LABEL[status]}</span>
+        </div>
+        ${d.note ? `<div style="font-size:12px;color:var(--txm);margin-top:4px">${esc(d.note)}</div>` : ''}
+        <div class="debt-amounts">
+          <div class="debt-amt-box"><span class="lbl">Kwota</span><span class="val">${fmtPLN(amount)}</span></div>
+          <div class="debt-amt-box"><span class="lbl">Spłacone</span><span class="val ok">${fmtPLN(paid)}</span></div>
+          <div class="debt-amt-box"><span class="lbl">Pozostało</span><span class="val ${remaining > 0 ? 'rem' : 'ok'}">${fmtPLN(remaining)}</span></div>
+          <div class="debt-amt-box"><span class="lbl">Termin</span><span class="val">${dueText}</span></div>
+        </div>
+        <div class="debt-progress"><div class="debt-progress-bar" style="width:${pct}%"></div></div>
+
+        <div class="debt-actions">
+          ${!isPaid ? `<button class="btn bp bsm" onclick="toggleDebtPay(${origIdx})">+ Dodaj spłatę</button>` : ''}
+          <button class="btn bg bsm" onclick="toggleDebtEdit(${origIdx})">✎ Edytuj</button>
+          <button class="btn bd bsm" onclick="deleteDebt(${origIdx})">✕ Usuń</button>
+        </div>
+
+        <div class="debt-pay-row" id="debt-pay-${origIdx}" style="display:none">
+          <div class="field" style="margin:0;flex:1"><label>Kwota spłaty (zł)</label><input type="number" id="debt-pay-amt-${origIdx}" step="0.01" placeholder="${remaining.toFixed(2)}"/></div>
+          <button class="btn bp bsm" onclick="addDebtPayment(${origIdx})">Zapisz spłatę</button>
+          <button class="btn bg bsm" onclick="toggleDebtPay(${origIdx})">✕</button>
+        </div>
+
+        <div class="debt-edit" id="debt-edit-${origIdx}">
+          <div class="field" style="margin:0"><label>Komu zalegam</label><input id="debt-e-creditor-${origIdx}" value="${esc(d.creditor || '')}"/></div>
+          <div class="field" style="margin:0"><label>Kwota (zł)</label><input type="number" id="debt-e-amount-${origIdx}" step="0.01" value="${amount}"/></div>
+          <div class="field" style="margin:0"><label>Spłacone (zł)</label><input type="number" id="debt-e-paid-${origIdx}" step="0.01" value="${paid}"/></div>
+          <div class="field" style="margin:0"><label>Termin</label><input type="date" id="debt-e-due-${origIdx}" value="${d.dueDate || ''}"/></div>
+          <div class="field" style="margin:0;grid-column:1/-1"><label>Notatka</label><input id="debt-e-note-${origIdx}" value="${esc(d.note || '')}"/></div>
+          <div style="display:flex;gap:5px;padding-bottom:1px;grid-column:1/-1">
+            <button class="btn bp bsm" onclick="updateDebt(${origIdx})">Zapisz zmiany</button>
+            <button class="btn bg bsm" onclick="toggleDebtEdit(${origIdx})">Anuluj</button>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+window.renderDebts = renderDebts;
+
+window.toggleDebtAdd = function() {
+  const el = $('debt-add');
+  if (el) {
+    el.classList.toggle('open');
+    if (el.classList.contains('open')) {
+      $('d-creditor')?.focus();
+    }
+  }
+};
+
+window.saveDebt = function() {
+  const creditor = $('d-creditor').value.trim();
+  const amount = parseFloat($('d-amount').value) || 0;
+  const paid = parseFloat($('d-paid-init').value) || 0;
+  const dueDate = $('d-due').value;
+  const note = $('d-note').value.trim();
+
+  if (!creditor || amount <= 0) {
+    toast('Podaj komu zalegasz i kwotę', 'err');
+    return;
+  }
+
+  S.debts.push({
+    id: uid(),
+    creditor,
+    amount,
+    paid: Math.min(paid, amount),
+    dueDate: dueDate || null,
+    note,
+    createdAt: new Date().toISOString()
+  });
+
+  // Reset form
+  $('d-creditor').value = '';
+  $('d-amount').value = '';
+  $('d-paid-init').value = '';
+  $('d-due').value = '';
+  $('d-note').value = '';
+  $('debt-add').classList.remove('open');
+
+  save();
+  renderDebts();
+  toast('Dodano dług');
+};
+
+window.toggleDebtPay = function(idx) {
+  const row = $(`debt-pay-${idx}`);
+  if (row) {
+    const showing = row.style.display !== 'none';
+    row.style.display = showing ? 'none' : 'flex';
+    if (!showing) $(`debt-pay-amt-${idx}`)?.focus();
+  }
+};
+
+window.addDebtPayment = function(idx) {
+  const amt = parseFloat($(`debt-pay-amt-${idx}`).value) || 0;
+  if (amt <= 0) {
+    toast('Podaj kwotę spłaty', 'err');
+    return;
+  }
+  const debt = S.debts[idx];
+  const newPaid = Math.min((Number(debt.paid) || 0) + amt, Number(debt.amount) || 0);
+  debt.paid = newPaid;
+  save();
+  renderDebts();
+
+  if (debtStatus(debt) === 'done') {
+    toast('🎉 Dług spłacony w całości!');
+  } else {
+    toast(`Dodano spłatę ${fmtPLN(amt)}`);
+  }
+};
+
+window.toggleDebtEdit = function(idx) {
+  const el = $(`debt-edit-${idx}`);
+  if (el) el.classList.toggle('open');
+};
+
+window.updateDebt = function(idx) {
+  const debt = S.debts[idx];
+  debt.creditor = $(`debt-e-creditor-${idx}`).value.trim();
+  debt.amount = parseFloat($(`debt-e-amount-${idx}`).value) || 0;
+  debt.paid = Math.min(parseFloat($(`debt-e-paid-${idx}`).value) || 0, debt.amount);
+  debt.dueDate = $(`debt-e-due-${idx}`).value || null;
+  debt.note = $(`debt-e-note-${idx}`).value.trim();
+  save();
+  renderDebts();
+  toast('Zaktualizowano');
+};
+
+window.deleteDebt = function(idx) {
+  if (!confirm('Usunąć ten dług?')) return;
+  S.debts.splice(idx, 1);
+  save();
+  renderDebts();
+  toast('Usunięto');
+};
+
+
 
 function renderAnalytics() {
   const rev = totalRevenue();
