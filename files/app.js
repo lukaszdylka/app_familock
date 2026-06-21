@@ -2118,6 +2118,22 @@ document.addEventListener('DOMContentLoaded', async () => {
       await window.initSupabase();
     }
     
+    // Keep-alive ping to prevent Supabase project pause
+    // Ping every 6 days to keep project active
+    if (window.supabase) {
+      setInterval(async () => {
+        try {
+          await window.supabase
+            .from('sessions')
+            .select('count', { count: 'exact' })
+            .limit(1);
+          console.log('✅ Keep-alive ping sent');
+        } catch (err) {
+          console.log('Keep-alive ping error (expected if offline):', err.message);
+        }
+      }, 6 * 24 * 60 * 60 * 1000); // Every 6 days
+    }
+    
     // Initial render
     renderDash();
     
@@ -2152,11 +2168,7 @@ window.go = function(tab) {
     }, 100);
   }
 };
-// Keep-alive ping every 6 days
-setInterval(async () => {
-  await supabase.from('sessions').select(...)
-  console.log('✅ Keep-alive ping sent')
-}, 6 * 24 * 60 * 60 * 1000)
+
 // Setup on page load
 setTimeout(() => {
   // Setup PDF drop zone if costs tab is active
