@@ -197,9 +197,10 @@
       <div class="rp-add" id="rp-add">
         <div style="font-size:10px;font-weight:700;color:var(--txm);margin-bottom:9px;text-transform:uppercase;letter-spacing:.09em">Nowy okres / zmiana stawki</div>
         <div class="rp-add-grid">
-          <div class="field" style="margin:0"><label>Opis okresu</label><input type="text" id="rp-lbl" placeholder="np. kwi 2026 – …"/></div>
+          <div class="field" style="margin:0"><label>Opis okresu</label><input type="text" id="rp-lbl" placeholder="np. Czynsz 2026"/></div>
+          <div class="field" style="margin:0"><label>Od miesiąca</label><input type="month" id="rp-start"/></div>
           <div class="field" style="margin:0"><label>zł / mies.</label><input type="number" id="rp-rate" step="0.01" placeholder="1600"/></div>
-          <div class="field" style="margin:0"><label>Miesięcy</label><input type="number" id="rp-months" step="1" min="1" placeholder="12"/></div>
+          <div class="field" style="margin:0"><label>Miesięcy</label><input type="number" id="rp-months" step="1" min="1" placeholder="1"/></div>
           <div style="padding-bottom:1px;display:flex;gap:5px">
             <button class="btn bp bsm" onclick="saveRP()">Dodaj</button>
             <button class="btn bg bsm" onclick="$('rp-add').classList.remove('open')">✕</button>

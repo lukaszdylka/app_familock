@@ -265,7 +265,8 @@ body {
   flex: 1;
   min-height: 100vh;
   padding: 26px 30px 60px;
-  max-width: calc(100vw - var(--sw));
+  width: calc(100% - var(--sw));
+  box-sizing: border-box;
 }
 
 .ph {
@@ -789,6 +790,18 @@ hr.div {
   color: var(--tx);
 }
 
+.rp-range {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ac, #3b82f6);
+  background: rgba(59,130,246,.12);
+  padding: 1px 7px;
+  border-radius: 99px;
+  margin-left: 6px;
+  letter-spacing: .02em;
+}
+
 .rp-detail {
   font-size: 10px;
   color: var(--txm);
@@ -833,7 +846,7 @@ hr.div {
 
 .rp-add-grid {
   display: grid;
-  grid-template-columns: 1.5fr 85px 85px auto;
+  grid-template-columns: 1.5fr 130px 85px 85px auto;
   gap: 7px;
   align-items: end;
 }
@@ -988,7 +1001,7 @@ hr.div {
 
 .ue-grid-p {
   display: grid;
-  grid-template-columns: 1.2fr 80px 80px auto;
+  grid-template-columns: 1.2fr 120px 80px 80px auto;
   gap: 7px;
   align-items: end;
 }
@@ -1509,6 +1522,7 @@ hr.div {
   
   .main {
     margin-left: 0;
+    width: 100%;
     max-width: 100vw;
     padding: 16px 13px 76px;
   }

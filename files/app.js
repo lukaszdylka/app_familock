@@ -166,6 +166,28 @@ const thisYM = () => {
   return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}`;
 };
 
+// Add N months to a YYYY-MM string → returns YYYY-MM
+const addMonths = (ym, n) => {
+  const [y, m] = ym.split('-').map(Number);
+  const total = (y * 12 + (m - 1)) + n;
+  const ny = Math.floor(total / 12);
+  const nm = (total % 12) + 1;
+  return `${ny}-${String(nm).padStart(2, '0')}`;
+};
+
+// Range label: startMonth + months → "wrz 2025 → mar 2026"
+const monthRange = (startMonth, months) => {
+  if (!startMonth || !months || months < 1) return '';
+  const last = addMonths(startMonth, months - 1);
+  return `${fmtYM(startMonth)} → ${fmtYM(last)}`;
+};
+
+// Just the last month of a period → "mar 2026"
+const lastMonth = (startMonth, months) => {
+  if (!startMonth || !months || months < 1) return '';
+  return fmtYM(addMonths(startMonth, months - 1));
+};
+
 const set = (id, v) => {
   const e = $(id);
   if (e) e.textContent = v;
@@ -582,12 +604,13 @@ function renderRentList() {
   
   // Regular periods
   S.rentPeriods.forEach((p, idx) => {
+    const range = monthRange(p.startMonth, p.months);
     html += `
       <div class="rp">
         <div class="rp-head">
           <div class="rp-dot"></div>
           <div>
-            <div class="rp-name">${esc(p.label)}</div>
+            <div class="rp-name">${esc(p.label)}${range ? ` <span class="rp-range">${range}</span>` : ''}</div>
             <div class="rp-detail">${fmtPLN(p.rate)}/mies. × ${p.months} mies.</div>
           </div>
           <div style="display:flex;gap:5px">
@@ -598,6 +621,7 @@ function renderRentList() {
         </div>
         <div class="rp-edit" id="rp-edit-${idx}" style="display:none">
           <div class="field" style="margin:0"><label>Opis</label><input id="rpe-lbl-${idx}" value="${esc(p.label)}"/></div>
+          <div class="field" style="margin:0"><label>Od miesiąca</label><input type="month" id="rpe-start-${idx}" value="${p.startMonth || ''}"/></div>
           <div class="field" style="margin:0"><label>zł/mies.</label><input type="number" id="rpe-rate-${idx}" step="0.01" value="${p.rate}"/></div>
           <div class="field" style="margin:0"><label>Miesięcy</label><input type="number" id="rpe-months-${idx}" value="${p.months}"/></div>
           <div style="display:flex;gap:5px;padding-bottom:1px">
@@ -620,10 +644,16 @@ window.editRP = function(idx) {
 };
 
 window.addRentMonth = function(idx) {
-  S.rentPeriods[idx].months = (parseInt(S.rentPeriods[idx].months) || 0) + 1;
+  const p = S.rentPeriods[idx];
+  p.months = (parseInt(p.months) || 0) + 1;
   save();
   renderCosts();
-  toast(`+1 miesiąc · teraz ${S.rentPeriods[idx].months} mies.`);
+  const lm = lastMonth(p.startMonth, p.months);
+  if (lm) {
+    toast(`Dodano miesiąc · do ${lm} (${p.months} mies.)`);
+  } else {
+    toast(`+1 miesiąc · teraz ${p.months} mies.`);
+  }
 };
 
 window.cancelEditRP = function(idx) {
@@ -633,6 +663,7 @@ window.cancelEditRP = function(idx) {
 
 window.updateRP = function(idx) {
   S.rentPeriods[idx].label = $(`rpe-lbl-${idx}`).value;
+  S.rentPeriods[idx].startMonth = $(`rpe-start-${idx}`).value || null;
   S.rentPeriods[idx].rate = parseFloat($(`rpe-rate-${idx}`).value) || 0;
   S.rentPeriods[idx].months = parseInt($(`rpe-months-${idx}`).value) || 0;
   save();
@@ -650,16 +681,18 @@ window.deleteRP = function(idx) {
 
 window.saveRP = function() {
   const lbl = $('rp-lbl').value.trim();
+  const startMonth = $('rp-start').value;
   const rate = parseFloat($('rp-rate').value) || 0;
   const months = parseInt($('rp-months').value) || 0;
   
   if (!lbl || rate <= 0 || months <= 0) {
-    toast('Wypełnij wszystkie pola', 'err');
+    toast('Wypełnij opis, stawkę i liczbę miesięcy', 'err');
     return;
   }
   
-  S.rentPeriods.push({ id: uid(), label: lbl, rate, months });
+  S.rentPeriods.push({ id: uid(), label: lbl, rate, months, startMonth: startMonth || null });
   $('rp-lbl').value = '';
+  $('rp-start').value = '';
   $('rp-rate').value = '';
   $('rp-months').value = '';
   $('rp-add').classList.remove('open');
@@ -709,10 +742,11 @@ function renderUtilEntries(uidx, util) {
   
   util.entries.forEach((e, eidx) => {
     const amt = e.type === 'period' ? e.rate * e.months : e.amount;
+    const range = e.type === 'period' ? monthRange(e.startMonth, e.months) : '';
     html += `
       <div class="ue">
         <div class="ue-lbl">
-          ${e.type === 'period' ? `${esc(e.label)} (${fmtPLN(e.rate)}/mies. × ${e.months})` : esc(e.label)}
+          ${e.type === 'period' ? `${esc(e.label)}${range ? ` <span class="rp-range">${range}</span>` : ''} (${fmtPLN(e.rate)}/mies. × ${e.months})` : esc(e.label)}
         </div>
         <div class="ue-amt">${fmtPLN(amt)}</div>
         <div style="display:flex;gap:4px">
@@ -746,7 +780,8 @@ function renderUtilEntries(uidx, util) {
       </div>
       <div id="ue-form-period-${uidx}" style="display:none">
         <div class="ue-grid-p">
-          <div class="field" style="margin:0"><label>Okres</label><input id="ue-lbl-p-${uidx}" placeholder="np. sty-mar 2024"/></div>
+          <div class="field" style="margin:0"><label>Okres</label><input id="ue-lbl-p-${uidx}" placeholder="np. Prąd 2026"/></div>
+          <div class="field" style="margin:0"><label>Od mies.</label><input type="month" id="ue-start-p-${uidx}"/></div>
           <div class="field" style="margin:0"><label>zł/mies.</label><input type="number" id="ue-rate-p-${uidx}" step="0.01"/></div>
           <div class="field" style="margin:0"><label>Miesięcy</label><input type="number" id="ue-months-p-${uidx}"/></div>
           <div style="display:flex;gap:5px;padding-bottom:1px">
@@ -815,11 +850,13 @@ window.saveUE = function(uidx, type) {
     $(`ue-amt-m-${uidx}`).value = '';
   } else {
     const lbl = $(`ue-lbl-p-${uidx}`).value.trim();
+    const startMonth = $(`ue-start-p-${uidx}`).value;
     const rate = parseFloat($(`ue-rate-p-${uidx}`).value) || 0;
     const months = parseInt($(`ue-months-p-${uidx}`).value) || 0;
     if (!lbl || rate <= 0 || months <= 0) { toast('Wypełnij pola', 'err'); return; }
-    entry = { id: uid(), type: 'period', label: lbl, rate, months };
+    entry = { id: uid(), type: 'period', label: lbl, rate, months, startMonth: startMonth || null };
     $(`ue-lbl-p-${uidx}`).value = '';
+    $(`ue-start-p-${uidx}`).value = '';
     $(`ue-rate-p-${uidx}`).value = '';
     $(`ue-months-p-${uidx}`).value = '';
   }
@@ -845,7 +882,12 @@ window.addUtilMonth = function(uidx, eidx) {
     entry.months = (parseInt(entry.months) || 0) + 1;
     save();
     renderCosts();
-    toast(`+1 miesiąc · teraz ${entry.months} mies.`);
+    const lm = lastMonth(entry.startMonth, entry.months);
+    if (lm) {
+      toast(`Dodano miesiąc · do ${lm} (${entry.months} mies.)`);
+    } else {
+      toast(`+1 miesiąc · teraz ${entry.months} mies.`);
+    }
   }
 };
 
@@ -1980,6 +2022,8 @@ window.editUE = function(uidx, eidx) {
     $(`ue-amt-m-${uidx}`).value = entry.amount || '';
   } else {
     $(`ue-lbl-p-${uidx}`).value = entry.label || '';
+    const startEl = $(`ue-start-p-${uidx}`);
+    if (startEl) startEl.value = entry.startMonth || '';
     $(`ue-rate-p-${uidx}`).value = entry.rate || '';
     $(`ue-months-p-${uidx}`).value = entry.months || '';
   }
