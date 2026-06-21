@@ -17,6 +17,8 @@
 </script>
 <!-- Supabase SDK -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<!-- SheetJS for XLS/XLSX import -->
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 </head>
 <body>
 
@@ -154,72 +156,84 @@
 <!-- ══ COSTS ════════════════════════════════════════════════════ -->
 <div class="pg" id="pg-costs">
   <div class="ph"><div class="pt">Koszty</div><div class="ps">Czynsz z historią zmian stawek · Media z rozpisanymi wpisami · Koszty jednorazowe</div></div>
-  
-  <!-- PDF Import Zone -->
-  <div class="card mb4" style="background:linear-gradient(135deg,var(--s2),var(--s1));border:2px dashed var(--b3)">
-    <div class="ct"><span class="ct-ic">📄</span>Import faktur PDF</div>
-    
-    <div id="pdf-drop-zone" style="padding:16px;text-align:center;border-radius:var(--rs);transition:all var(--tr);cursor:pointer">
-      <div style="font-size:28px;margin-bottom:8px;opacity:0.6">📁</div>
-      <div style="font-size:13px;font-weight:600;color:var(--tx);margin-bottom:8px">
-        Przeciągnij faktury PDF tutaj
+
+  <div class="costs-layout">
+    <!-- LEFT: summary + PDF import (sticky) -->
+    <div class="costs-side">
+      <!-- Summary Card -->
+      <div class="card mb4">
+        <div class="ct"><span class="ct-ic">◈</span>Podsumowanie</div>
+        <div class="sum-lbl">Łączny koszt ogółem</div>
+        <div class="sum-big" id="c-total">0 zł</div>
+        <div class="mt3 sum-box">
+          <div class="sum-row"><span class="sum-row-l">🔧 Obsługa (czynsz)</span><span class="sum-row-v" id="c-rent">—</span></div>
+          <div class="sum-row"><span class="sum-row-l">🔧 Obsługa (media)</span><span class="sum-row-v" id="c-util">—</span></div>
+          <div class="sum-row"><span class="sum-row-l">🏗️ Remont</span><span class="sum-row-v" id="c-remont">—</span></div>
+          <div class="sum-row"><span class="sum-row-l">🛒 Zakupy</span><span class="sum-row-v" id="c-zakupy">—</span></div>
+          <div class="sum-row"><span class="sum-row-l">Mies. czynszu</span><span class="sum-row-v" id="c-months">—</span></div>
+        </div>
+        <div style="font-size:10px;font-weight:700;color:var(--txm);text-transform:uppercase;letter-spacing:.09em;margin-bottom:7px;margin-top:14px">Ile gier do zwrotu</div>
+        <div id="c-games-table"></div>
+        <hr class="div">
+        <button class="btn bg bsm w100" onclick="copyCosts()">↓ Kopiuj zestawienie</button>
       </div>
-      <label class="btn bp bsm" style="cursor:pointer">
-        📎 Lub wybierz pliki
-        <input type="file" id="pdf-file-input" accept=".pdf" multiple style="display:none"/>
-      </label>
-    </div>
-  </div>
-  
-  <!-- Summary Card First -->
-  <div class="card mb4" style="max-width:600px">
-    <div class="ct"><span class="ct-ic">◈</span>Podsumowanie</div>
-    <div class="sum-lbl">Łączny koszt ogółem</div>
-    <div class="sum-big" id="c-total">0 zł</div>
-    <div class="mt3 sum-box">
-      <div class="sum-row"><span class="sum-row-l">🔧 Obsługa (czynsz)</span><span class="sum-row-v" id="c-rent">—</span></div>
-      <div class="sum-row"><span class="sum-row-l">🔧 Obsługa (media)</span><span class="sum-row-v" id="c-util">—</span></div>
-      <div class="sum-row"><span class="sum-row-l">🏗️ Remont</span><span class="sum-row-v" id="c-remont">—</span></div>
-      <div class="sum-row"><span class="sum-row-l">🛒 Zakupy</span><span class="sum-row-v" id="c-zakupy">—</span></div>
-      <div class="sum-row"><span class="sum-row-l">Mies. czynszu</span><span class="sum-row-v" id="c-months">—</span></div>
-    </div>
-    <div style="font-size:10px;font-weight:700;color:var(--txm);text-transform:uppercase;letter-spacing:.09em;margin-bottom:7px;margin-top:14px">Ile gier do zwrotu</div>
-    <div id="c-games-table"></div>
-    <hr class="div">
-    <button class="btn bg bsm w100" onclick="copyCosts()">↓ Kopiuj zestawienie</button>
-  </div>
-  
-  <!-- Full width content -->
-  <div>
-    <div class="card mb4">
-      <div class="ct"><span class="ct-ic">🏠</span>Czynsz — historia okresów</div>
-      <div id="rent-list"></div>
-      <div class="rp-add" id="rp-add">
-        <div style="font-size:10px;font-weight:700;color:var(--txm);margin-bottom:9px;text-transform:uppercase;letter-spacing:.09em">Nowy okres / zmiana stawki</div>
-        <div class="rp-add-grid">
-          <div class="field" style="margin:0"><label>Opis okresu</label><input type="text" id="rp-lbl" placeholder="np. Czynsz 2026"/></div>
-          <div class="field" style="margin:0"><label>Od miesiąca</label><input type="month" id="rp-start"/></div>
-          <div class="field" style="margin:0"><label>zł / mies.</label><input type="number" id="rp-rate" step="0.01" placeholder="1600"/></div>
-          <div class="field" style="margin:0"><label>Miesięcy</label><input type="number" id="rp-months" step="1" min="1" placeholder="1"/></div>
-          <div style="padding-bottom:1px;display:flex;gap:5px">
-            <button class="btn bp bsm" onclick="saveRP()">Dodaj</button>
-            <button class="btn bg bsm" onclick="$('rp-add').classList.remove('open')">✕</button>
+
+      <!-- PDF Import Zone -->
+      <div class="card" style="background:linear-gradient(135deg,var(--s2),var(--s1));border:2px dashed var(--b3)">
+        <div class="ct"><span class="ct-ic">📄</span>Import faktur PDF</div>
+        <div id="pdf-drop-zone" style="padding:16px;text-align:center;border-radius:var(--rs);transition:all var(--tr);cursor:pointer">
+          <div style="font-size:28px;margin-bottom:8px;opacity:0.6">📁</div>
+          <div style="font-size:13px;font-weight:600;color:var(--tx);margin-bottom:8px">
+            Przeciągnij faktury PDF tutaj
           </div>
+          <label class="btn bp bsm" style="cursor:pointer">
+            📎 Lub wybierz pliki
+            <input type="file" id="pdf-file-input" accept=".pdf" multiple style="display:none"/>
+          </label>
+        </div>
+        <hr class="div">
+        <div style="text-align:center">
+          <div style="font-size:11px;color:var(--txm);margin-bottom:8px">Masz spis faktur w arkuszu?</div>
+          <label class="btn bg bsm" style="cursor:pointer">
+            📊 Import XLS / XLSX / CSV
+            <input type="file" id="xls-file-input" accept=".xls,.xlsx,.csv" style="display:none"/>
+          </label>
         </div>
       </div>
-      <div class="mt3"><button class="btn bg bsm" onclick="$('rp-add').classList.add('open');$('rp-rate').focus()">+ Nowy okres / zmiana stawki</button></div>
     </div>
-    <div class="card mb4">
-      <div class="ct frow"><span><span class="ct-ic">🔧</span>Obsługa lokalu (media)</span><button class="btn bg bsm" onclick="addUtil()">+ Dodaj</button></div>
-      <div class="util-list" id="util-list"></div>
-    </div>
-    <div class="card mb4">
-      <div class="ct frow"><span><span class="ct-ic">🏗️</span>Remont</span><button class="btn bg bsm" onclick="addRemont()">+ Dodaj</button></div>
-      <div id="remont-list"></div>
-    </div>
-    <div class="card">
-      <div class="ct frow"><span><span class="ct-ic">🛒</span>Zakupy</span><button class="btn bg bsm" onclick="addZakupy()">+ Dodaj</button></div>
-      <div id="zakupy-list"></div>
+
+    <!-- RIGHT: editable cost lists -->
+    <div class="costs-main">
+      <div class="card mb4">
+        <div class="ct"><span class="ct-ic">🏠</span>Czynsz — historia okresów</div>
+        <div id="rent-list"></div>
+        <div class="rp-add" id="rp-add">
+          <div style="font-size:10px;font-weight:700;color:var(--txm);margin-bottom:9px;text-transform:uppercase;letter-spacing:.09em">Nowy okres / zmiana stawki</div>
+          <div class="rp-add-grid">
+            <div class="field" style="margin:0"><label>Opis okresu</label><input type="text" id="rp-lbl" placeholder="np. Czynsz 2026"/></div>
+            <div class="field" style="margin:0"><label>Od miesiąca</label><input type="month" id="rp-start"/></div>
+            <div class="field" style="margin:0"><label>zł / mies.</label><input type="number" id="rp-rate" step="0.01" placeholder="1600"/></div>
+            <div class="field" style="margin:0"><label>Miesięcy</label><input type="number" id="rp-months" step="1" min="1" placeholder="1"/></div>
+            <div style="padding-bottom:1px;display:flex;gap:5px">
+              <button class="btn bp bsm" onclick="saveRP()">Dodaj</button>
+              <button class="btn bg bsm" onclick="$('rp-add').classList.remove('open')">✕</button>
+            </div>
+          </div>
+        </div>
+        <div class="mt3"><button class="btn bg bsm" onclick="$('rp-add').classList.add('open');$('rp-rate').focus()">+ Nowy okres / zmiana stawki</button></div>
+      </div>
+      <div class="card mb4">
+        <div class="ct frow"><span><span class="ct-ic">🔧</span>Obsługa lokalu (media)</span><button class="btn bg bsm" onclick="addUtil()">+ Dodaj</button></div>
+        <div class="util-list" id="util-list"></div>
+      </div>
+      <div class="card mb4">
+        <div class="ct frow"><span><span class="ct-ic">🏗️</span>Remont</span><button class="btn bg bsm" onclick="addRemont()">+ Dodaj</button></div>
+        <div id="remont-list"></div>
+      </div>
+      <div class="card">
+        <div class="ct frow"><span><span class="ct-ic">🛒</span>Zakupy</span><button class="btn bg bsm" onclick="addZakupy()">+ Dodaj</button></div>
+        <div id="zakupy-list"></div>
+      </div>
     </div>
   </div>
 </div>
@@ -392,6 +406,48 @@
 
 </main>
 </div><!-- end main-app -->
+
+<!-- ══ XLS/CSV IMPORT MODAL ════════════════════════════════════════ -->
+<div class="modal-overlay" id="xls-modal">
+  <div class="modal-box">
+    <div class="modal-head">
+      <div class="modal-title">📊 Import kosztów z arkusza</div>
+      <button class="btn bg bsm" onclick="closeXlsModal()">✕</button>
+    </div>
+
+    <div class="modal-body">
+      <div class="xls-row">
+        <div class="field" style="margin:0">
+          <label>Kategoria docelowa</label>
+          <select id="xls-category"></select>
+        </div>
+        <div class="field" style="margin:0">
+          <label>Arkusz</label>
+          <select id="xls-sheet" onchange="xlsReloadSheet()"></select>
+        </div>
+      </div>
+
+      <div style="font-size:11px;font-weight:700;color:var(--txm);text-transform:uppercase;letter-spacing:.07em;margin:14px 0 8px">Mapowanie kolumn</div>
+      <div class="xls-map">
+        <div class="field" style="margin:0"><label>Opis / nazwa</label><select id="xls-col-name" onchange="xlsUpdatePreview()"></select></div>
+        <div class="field" style="margin:0"><label>Kwota</label><select id="xls-col-amount" onchange="xlsUpdatePreview()"></select></div>
+        <div class="field" style="margin:0"><label>Data (opcjonalnie)</label><select id="xls-col-date" onchange="xlsUpdatePreview()"></select></div>
+      </div>
+
+      <div class="xls-summary" id="xls-summary"></div>
+
+      <div style="font-size:11px;font-weight:700;color:var(--txm);text-transform:uppercase;letter-spacing:.07em;margin:14px 0 8px">Podgląd (pierwsze wiersze)</div>
+      <div class="xls-preview-wrap">
+        <table class="xls-preview" id="xls-preview"></table>
+      </div>
+    </div>
+
+    <div class="modal-foot">
+      <button class="btn bg" onclick="closeXlsModal()">Anuluj</button>
+      <button class="btn bp" onclick="xlsConfirmImport()">Importuj <span id="xls-import-count"></span></button>
+    </div>
+  </div>
+</div>
 
 <div class="toast" id="toast"></div>
 

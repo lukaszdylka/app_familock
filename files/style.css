@@ -998,6 +998,37 @@ hr.div {
   border-bottom: none;
 }
 
+.ue-wrap:last-child .ue {
+  border-bottom: none;
+}
+
+.ue-edit {
+  display: none;
+  grid-template-columns: 1.4fr 120px 90px 90px auto;
+  gap: 7px;
+  align-items: end;
+  padding: 10px;
+  margin: 4px 0 8px;
+  background: var(--s2);
+  border: 1px solid var(--b2);
+  border-radius: var(--rs, 8px);
+}
+
+.ue-edit.ue-edit-m {
+  grid-template-columns: 1.6fr 130px auto;
+}
+
+.ue-edit.open {
+  display: grid;
+}
+
+@media (max-width: 760px) {
+  .ue-edit,
+  .ue-edit.ue-edit-m {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
 .ue-lbl {
   font-size: 12px;
   color: var(--tx);
@@ -1632,5 +1663,126 @@ hr.div {
   
   .task-input-row {
     grid-template-columns: 1fr auto;
+  }
+}
+
+/* ── XLS/CSV Import Modal ── */
+.modal-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.66);
+  z-index: 1000;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  backdrop-filter: blur(2px);
+}
+.modal-overlay.open {
+  display: flex;
+}
+.modal-box {
+  background: var(--s1);
+  border: 1px solid var(--b2);
+  border-radius: var(--r);
+  width: 100%;
+  max-width: 760px;
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 60px rgba(0,0,0,.5);
+}
+.modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--b1);
+}
+.modal-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--tx);
+}
+.modal-body {
+  padding: 16px 18px;
+  overflow-y: auto;
+  flex: 1;
+}
+.modal-foot {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  padding: 14px 18px;
+  border-top: 1px solid var(--b1);
+}
+.xls-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.xls-map {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 10px;
+}
+.modal-box select {
+  width: 100%;
+  padding: 8px 10px;
+  background: var(--s2);
+  border: 1px solid var(--b2);
+  border-radius: var(--rs, 8px);
+  color: var(--tx);
+  font-size: 12px;
+}
+.xls-summary {
+  margin-top: 14px;
+  padding: 10px 12px;
+  background: var(--s2);
+  border-radius: var(--rs, 8px);
+  font-size: 12px;
+  color: var(--txm);
+}
+.xls-summary b { color: var(--tx); }
+.xls-preview-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--b1);
+  border-radius: var(--rs, 8px);
+}
+.xls-preview {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.xls-preview th {
+  background: var(--s2);
+  padding: 7px 10px;
+  text-align: left;
+  font-weight: 700;
+  color: var(--txm);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  white-space: nowrap;
+}
+.xls-preview td {
+  padding: 7px 10px;
+  border-top: 1px solid var(--b1);
+  color: var(--tx);
+}
+.xls-preview td.amt {
+  font-family: var(--fm);
+  color: var(--ac2);
+  text-align: right;
+  white-space: nowrap;
+}
+.xls-preview tr.skip td {
+  opacity: .4;
+  text-decoration: line-through;
+}
+
+@media (max-width: 640px) {
+  .xls-row, .xls-map {
+    grid-template-columns: 1fr;
   }
 }

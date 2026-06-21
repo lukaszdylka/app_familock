@@ -744,15 +744,32 @@ function renderUtilEntries(uidx, util) {
     const amt = e.type === 'period' ? e.rate * e.months : e.amount;
     const range = e.type === 'period' ? monthRange(e.startMonth, e.months) : '';
     html += `
-      <div class="ue">
-        <div class="ue-lbl">
-          ${e.type === 'period' ? `${esc(e.label)}${range ? ` <span class="rp-range">${range}</span>` : ''} (${fmtPLN(e.rate)}/mies. × ${e.months})` : esc(e.label)}
+      <div class="ue-wrap">
+        <div class="ue">
+          <div class="ue-lbl">
+            ${e.type === 'period' ? `${esc(e.label)}${range ? ` <span class="rp-range">${range}</span>` : ''} (${fmtPLN(e.rate)}/mies. × ${e.months})` : esc(e.label)}
+          </div>
+          <div class="ue-amt">${fmtPLN(amt)}</div>
+          <div style="display:flex;gap:4px">
+            ${e.type === 'period' ? `<button class="btn bg bsm" onclick="addUtilMonth(${uidx},${eidx})" title="Dodaj kolejny miesiąc">+1 mies.</button>` : ''}
+            <button class="btn be" onclick="editUE(${uidx},${eidx})">✎</button>
+            <button class="btn bd" onclick="deleteUE(${uidx},${eidx})">✕</button>
+          </div>
         </div>
-        <div class="ue-amt">${fmtPLN(amt)}</div>
-        <div style="display:flex;gap:4px">
-          ${e.type === 'period' ? `<button class="btn bg bsm" onclick="addUtilMonth(${uidx},${eidx})" title="Dodaj kolejny miesiąc">+1 mies.</button>` : ''}
-          <button class="btn be" onclick="editUE(${uidx},${eidx})">✎</button>
-          <button class="btn bd" onclick="deleteUE(${uidx},${eidx})">✕</button>
+        <div class="ue-edit ue-edit-${e.type === 'monthly' ? 'm' : 'p'}" id="ue-edit-${uidx}-${eidx}">
+          ${e.type === 'monthly' ? `
+            <div class="field" style="margin:0"><label>Opis</label><input id="uee-lbl-${uidx}-${eidx}" value="${esc(e.label || '')}"/></div>
+            <div class="field" style="margin:0"><label>Kwota (zł)</label><input type="number" step="0.01" id="uee-amt-${uidx}-${eidx}" value="${e.amount || ''}"/></div>
+          ` : `
+            <div class="field" style="margin:0"><label>Opis</label><input id="uee-lbl-${uidx}-${eidx}" value="${esc(e.label || '')}"/></div>
+            <div class="field" style="margin:0"><label>Od mies.</label><input type="month" id="uee-start-${uidx}-${eidx}" value="${e.startMonth || ''}"/></div>
+            <div class="field" style="margin:0"><label>zł/mies.</label><input type="number" step="0.01" id="uee-rate-${uidx}-${eidx}" value="${e.rate || ''}"/></div>
+            <div class="field" style="margin:0"><label>Miesięcy</label><input type="number" id="uee-months-${uidx}-${eidx}" value="${e.months || ''}"/></div>
+          `}
+          <div style="display:flex;gap:5px;padding-bottom:1px">
+            <button class="btn bp bsm" onclick="updateUE(${uidx},${eidx})">Zapisz</button>
+            <button class="btn bg bsm" onclick="cancelEditUE(${uidx},${eidx})">Anuluj</button>
+          </div>
         </div>
       </div>
     `;
@@ -2001,39 +2018,44 @@ window.resetData = function() {
 //  Wklej na końcu pliku przed document.addEventListener('DOMContentLoaded'...
 // ════════════════════════════════════════════════════════════════
 
-// ── FIX: Dodaj funkcję editUE (BRAKUJĄCA!) ──
+// ── In-place edit for utility entries (no data loss) ──
 window.editUE = function(uidx, eidx) {
+  // Close any other open edit forms in this utility
+  document.querySelectorAll(`[id^="ue-edit-${uidx}-"]`).forEach(e => e.classList.remove('open'));
+  const el = $(`ue-edit-${uidx}-${eidx}`);
+  if (el) el.classList.add('open');
+};
+
+window.cancelEditUE = function(uidx, eidx) {
+  const el = $(`ue-edit-${uidx}-${eidx}`);
+  if (el) el.classList.remove('open');
+};
+
+window.updateUE = function(uidx, eidx) {
   const entry = S.utilities[uidx].entries[eidx];
   if (!entry) return;
-  
-  const type = entry.type;
-  const prefix = type === 'monthly' ? 'm' : 'p';
-  
-  // Show add form
-  const addForm = $(`ue-add-${uidx}`);
-  if (addForm) addForm.classList.add('open');
-  
-  // Switch to correct tab
-  switchUEType(uidx, type);
-  
-  // Fill form with current values
-  if (type === 'monthly') {
-    $(`ue-lbl-m-${uidx}`).value = entry.label || '';
-    $(`ue-amt-m-${uidx}`).value = entry.amount || '';
+
+  if (entry.type === 'monthly') {
+    const lbl = $(`uee-lbl-${uidx}-${eidx}`).value.trim();
+    const amt = parseFloat($(`uee-amt-${uidx}-${eidx}`).value) || 0;
+    if (!lbl || amt <= 0) { toast('Wypełnij opis i kwotę', 'err'); return; }
+    entry.label = lbl;
+    entry.amount = amt;
   } else {
-    $(`ue-lbl-p-${uidx}`).value = entry.label || '';
-    const startEl = $(`ue-start-p-${uidx}`);
-    if (startEl) startEl.value = entry.startMonth || '';
-    $(`ue-rate-p-${uidx}`).value = entry.rate || '';
-    $(`ue-months-p-${uidx}`).value = entry.months || '';
+    const lbl = $(`uee-lbl-${uidx}-${eidx}`).value.trim();
+    const startMonth = $(`uee-start-${uidx}-${eidx}`).value;
+    const rate = parseFloat($(`uee-rate-${uidx}-${eidx}`).value) || 0;
+    const months = parseInt($(`uee-months-${uidx}-${eidx}`).value) || 0;
+    if (!lbl || rate <= 0 || months <= 0) { toast('Wypełnij pola', 'err'); return; }
+    entry.label = lbl;
+    entry.startMonth = startMonth || null;
+    entry.rate = rate;
+    entry.months = months;
   }
-  
-  // Delete old entry
-  S.utilities[uidx].entries.splice(eidx, 1);
+
   save();
   renderCosts();
-  
-  toast('Edytuj i zapisz ponownie');
+  toast('Zaktualizowano');
 };
 
 // ══════════════════════════════════════════════════════════════
@@ -2380,6 +2402,244 @@ window.setupPDFDropZone = function() {
 };
 
 console.log('✓ PDF import module loaded');
+
+// ═══════════════════════════════════════════════════════════════
+//  XLS / XLSX / CSV IMPORT (koszty)
+// ═══════════════════════════════════════════════════════════════
+
+let xlsState = {
+  workbook: null,
+  rows: [],      // array of arrays (current sheet)
+  headers: [],   // header row
+  map: { name: -1, amount: -1, date: -1 }
+};
+
+window.setupXlsImport = function() {
+  const input = document.getElementById('xls-file-input');
+  if (input && !input._wired) {
+    input._wired = true;
+    input.addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (file) await handleXlsFile(file);
+      e.target.value = '';
+    });
+  }
+};
+
+async function handleXlsFile(file) {
+  if (typeof XLSX === 'undefined') {
+    toast('Biblioteka arkuszy nie załadowana', 'err');
+    return;
+  }
+  try {
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf, { type: 'array', cellDates: true });
+    xlsState.workbook = wb;
+
+    // Populate sheet selector
+    const sheetSel = $('xls-sheet');
+    sheetSel.innerHTML = wb.SheetNames.map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join('');
+
+    // Populate category selector
+    buildCategorySelect();
+
+    // Load first sheet
+    loadXlsSheet(wb.SheetNames[0]);
+
+    openXlsModal();
+  } catch (err) {
+    console.error('XLS read error:', err);
+    toast('Nie udało się odczytać pliku', 'err');
+  }
+}
+
+function buildCategorySelect() {
+  const sel = $('xls-category');
+  let opts = '<option value="remont">🏗️ Remont</option><option value="zakupy">🛒 Zakupy</option>';
+  S.utilities.forEach((u, i) => {
+    opts += `<option value="util:${i}">${esc(u.emoji || '💡')} Media: ${esc(u.name)}</option>`;
+  });
+  sel.innerHTML = opts;
+}
+
+function loadXlsSheet(name) {
+  const sheet = xlsState.workbook.Sheets[name];
+  const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, blankrows: false, defval: '' });
+  if (rows.length === 0) {
+    xlsState.rows = [];
+    xlsState.headers = [];
+    return;
+  }
+  xlsState.headers = rows[0].map(h => String(h).trim());
+  xlsState.rows = rows.slice(1);
+
+  // Build column dropdowns
+  const colOpts = (includeNone) => {
+    let o = includeNone ? '<option value="-1">— brak —</option>' : '';
+    xlsState.headers.forEach((h, i) => {
+      o += `<option value="${i}">${esc(h || `Kolumna ${i + 1}`)}</option>`;
+    });
+    return o;
+  };
+  $('xls-col-name').innerHTML = colOpts(false);
+  $('xls-col-amount').innerHTML = colOpts(false);
+  $('xls-col-date').innerHTML = colOpts(true);
+
+  // Auto-detect
+  autoDetectColumns();
+  xlsUpdatePreview();
+}
+
+function autoDetectColumns() {
+  const h = xlsState.headers.map(x => x.toLowerCase());
+  const find = (keywords) => h.findIndex(x => keywords.some(k => x.includes(k)));
+
+  let nameIdx = find(['opis', 'nazwa', 'name', 'description', 'kontrahent', 'tytuł', 'tytul', 'pozycja', 'usługa', 'usluga', 'towar']);
+  let amountIdx = find(['brutto', 'kwota', 'wartość', 'wartosc', 'amount', 'suma', 'cena', 'razem', 'total', 'należność', 'naleznosc']);
+  let dateIdx = find(['data', 'date', 'wystawienia']);
+
+  // Fallbacks
+  if (nameIdx === -1) nameIdx = 0;
+  if (amountIdx === -1) {
+    // pick a column that looks numeric in first data rows
+    amountIdx = xlsState.headers.findIndex((_, i) =>
+      xlsState.rows.slice(0, 5).some(r => parseAmount(r[i]) > 0)
+    );
+    if (amountIdx === -1) amountIdx = Math.min(1, xlsState.headers.length - 1);
+  }
+
+  xlsState.map = { name: nameIdx, amount: amountIdx, date: dateIdx };
+
+  $('xls-col-name').value = String(nameIdx);
+  $('xls-col-amount').value = String(amountIdx);
+  $('xls-col-date').value = String(dateIdx);
+}
+
+function parseAmount(v) {
+  if (v == null) return 0;
+  if (typeof v === 'number') return v;
+  let s = String(v).replace(/[^\d.,-]/g, '').trim();
+  if (!s) return 0;
+  // If both separators, assume . thousands and , decimal (PL) OR vice versa
+  if (s.includes('.') && s.includes(',')) {
+    if (s.lastIndexOf(',') > s.lastIndexOf('.')) {
+      s = s.replace(/\./g, '').replace(',', '.');
+    } else {
+      s = s.replace(/,/g, '');
+    }
+  } else if (s.includes(',')) {
+    s = s.replace(',', '.');
+  }
+  return parseFloat(s) || 0;
+}
+
+function parseDateCell(v) {
+  if (!v) return null;
+  if (v instanceof Date && !isNaN(v)) {
+    return `${v.getFullYear()}-${String(v.getMonth() + 1).padStart(2, '0')}-${String(v.getDate()).padStart(2, '0')}`;
+  }
+  const s = String(v).trim();
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.substring(0, 10);
+  let m = s.match(/^(\d{1,2})[-./](\d{1,2})[-./](\d{4})/);
+  if (m) return `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+  return null;
+}
+
+function getXlsParsedRows() {
+  const { name, amount, date } = xlsState.map;
+  const out = [];
+  xlsState.rows.forEach(r => {
+    const label = name >= 0 ? String(r[name] || '').trim() : '';
+    const amt = amount >= 0 ? parseAmount(r[amount]) : 0;
+    const dt = date >= 0 ? parseDateCell(r[date]) : null;
+    if (amt > 0) {
+      out.push({ label: label || '(bez opisu)', amount: amt, date: dt });
+    }
+  });
+  return out;
+}
+
+window.xlsReloadSheet = function() {
+  loadXlsSheet($('xls-sheet').value);
+};
+
+window.xlsUpdatePreview = function() {
+  xlsState.map = {
+    name: parseInt($('xls-col-name').value),
+    amount: parseInt($('xls-col-amount').value),
+    date: parseInt($('xls-col-date').value)
+  };
+
+  const parsed = getXlsParsedRows();
+  const total = parsed.reduce((s, p) => s + p.amount, 0);
+  const skipped = xlsState.rows.length - parsed.length;
+
+  $('xls-summary').innerHTML = `Do importu: <b>${parsed.length}</b> pozycji · suma <b>${fmtPLN(total)}</b>${skipped > 0 ? ` · pominięte (bez kwoty): ${skipped}` : ''}`;
+  set('xls-import-count', parsed.length > 0 ? `(${parsed.length})` : '');
+
+  // Preview table (first 12)
+  const preview = parsed.slice(0, 12);
+  let html = '<thead><tr><th>Opis</th><th>Kwota</th><th>Data</th></tr></thead><tbody>';
+  preview.forEach(p => {
+    html += `<tr><td>${esc(p.label)}</td><td class="amt">${fmtPLN(p.amount)}</td><td>${p.date || '—'}</td></tr>`;
+  });
+  if (parsed.length > 12) {
+    html += `<tr><td colspan="3" style="text-align:center;color:var(--txm);font-size:11px">…i ${parsed.length - 12} więcej</td></tr>`;
+  }
+  html += '</tbody>';
+  $('xls-preview').innerHTML = html;
+};
+
+window.xlsConfirmImport = function() {
+  const parsed = getXlsParsedRows();
+  if (parsed.length === 0) {
+    toast('Brak pozycji do importu', 'err');
+    return;
+  }
+
+  const cat = $('xls-category').value;
+  let added = 0;
+
+  if (cat === 'remont' || cat === 'zakupy') {
+    const arr = cat === 'remont' ? S.remont : S.zakupy;
+    parsed.forEach(p => {
+      const note = p.date ? `${p.label} (${p.date})` : p.label;
+      const exists = arr.some(x => x.name === note && Math.abs((x.amount || 0) - p.amount) < 0.01);
+      if (!exists) {
+        arr.push({ id: uid(), name: note, amount: p.amount });
+        added++;
+      }
+    });
+  } else if (cat.startsWith('util:')) {
+    const uidx = parseInt(cat.split(':')[1]);
+    const util = S.utilities[uidx];
+    if (util) {
+      parsed.forEach(p => {
+        const label = p.date ? `${p.label} (${p.date})` : p.label;
+        const exists = util.entries.some(x => x.label === label && Math.abs((x.amount || 0) - p.amount) < 0.01);
+        if (!exists) {
+          util.entries.push({ id: uid(), type: 'monthly', label, amount: p.amount });
+          added++;
+        }
+      });
+    }
+  }
+
+  save();
+  renderCosts();
+  closeXlsModal();
+  const skipped = parsed.length - added;
+  toast(`✓ Zaimportowano ${added} pozycji${skipped > 0 ? ` (pominięto ${skipped} duplikatów)` : ''}`);
+};
+
+window.openXlsModal = function() {
+  $('xls-modal').classList.add('open');
+};
+window.closeXlsModal = function() {
+  $('xls-modal').classList.remove('open');
+};
+
+
 document.addEventListener('DOMContentLoaded', async () => {
   try {
     console.log('🎯 DOM loaded, initializing...');
@@ -2412,7 +2672,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     // Initial render
     renderDash();
-    
+
+    // Setup spreadsheet import
+    if (window.setupXlsImport) window.setupXlsImport();
+
     console.log('✅ Familock ready!');
     toast('Aplikacja gotowa');
   } catch (err) {
