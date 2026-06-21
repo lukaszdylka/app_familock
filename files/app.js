@@ -2427,30 +2427,116 @@ window.setupXlsImport = function() {
 };
 
 async function handleXlsFile(file) {
-  if (typeof XLSX === 'undefined') {
-    toast('Biblioteka arkuszy nie załadowana', 'err');
-    return;
-  }
+  const isCsv = file.name.toLowerCase().endsWith('.csv');
+
   try {
+    if (isCsv) {
+      // CSV: own parser (SheetJS mis-reads "790,38" as 79038)
+      const rows = await readCsvAsRows(file);
+      xlsState.workbook = null;
+      const sheetSel = $('xls-sheet');
+      sheetSel.innerHTML = '<option value="CSV">CSV</option>';
+      buildCategorySelect();
+      setSheetRows(rows);
+      openXlsModal();
+      return;
+    }
+
+    if (typeof XLSX === 'undefined') {
+      toast('Biblioteka arkuszy nie załadowana', 'err');
+      return;
+    }
     const buf = await file.arrayBuffer();
     const wb = XLSX.read(buf, { type: 'array', cellDates: true });
     xlsState.workbook = wb;
 
-    // Populate sheet selector
     const sheetSel = $('xls-sheet');
     sheetSel.innerHTML = wb.SheetNames.map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join('');
 
-    // Populate category selector
     buildCategorySelect();
-
-    // Load first sheet
     loadXlsSheet(wb.SheetNames[0]);
-
     openXlsModal();
   } catch (err) {
     console.error('XLS read error:', err);
     toast('Nie udało się odczytać pliku', 'err');
   }
+}
+
+// Read CSV with encoding detection (UTF-8, fallback Windows-1250)
+async function readCsvAsRows(file) {
+  const buf = await file.arrayBuffer();
+  let text;
+  try {
+    text = new TextDecoder('utf-8', { fatal: true }).decode(buf);
+  } catch (e) {
+    try {
+      text = new TextDecoder('windows-1250').decode(buf);
+    } catch (e2) {
+      text = new TextDecoder('iso-8859-2').decode(buf);
+    }
+  }
+  // Strip BOM
+  text = text.replace(/^\uFEFF/, '');
+
+  const allLines = text.split(/\r?\n/).filter(l => l.trim());
+  if (allLines.length === 0) return [];
+
+  // Detect separator from header line
+  const header = allLines[0];
+  const seps = [';', '\t', '|', ','];
+  let sep = ';', best = 0;
+  seps.forEach(s => {
+    const n = header.split(s).length;
+    if (n > best) { best = n; sep = s; }
+  });
+
+  return allLines.map(line => parseCsvLine(line, sep));
+}
+
+function parseCsvLine(line, sep) {
+  const cols = [];
+  let cur = '', inQ = false;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (c === '"') {
+      if (inQ && line[i + 1] === '"') { cur += '"'; i++; }
+      else inQ = !inQ;
+    } else if (c === sep && !inQ) {
+      cols.push(cur.trim());
+      cur = '';
+    } else {
+      cur += c;
+    }
+  }
+  cols.push(cur.trim());
+  return cols;
+}
+
+// Set rows directly (used by both CSV and per-sheet xlsx)
+function setSheetRows(rows) {
+  if (!rows || rows.length === 0) {
+    xlsState.rows = [];
+    xlsState.headers = [];
+    $('xls-preview').innerHTML = '';
+    $('xls-summary').textContent = 'Plik pusty';
+    return;
+  }
+  xlsState.headers = rows[0].map(h => String(h).trim());
+  xlsState.rows = rows.slice(1);
+
+  const colOpts = (includeNone) => {
+    let o = includeNone ? '<option value="-1">— brak —</option>' : '';
+    xlsState.headers.forEach((h, i) => {
+      o += `<option value="${i}">${esc(h || `Kolumna ${i + 1}`)}</option>`;
+    });
+    return o;
+  };
+  $('xls-col-name').innerHTML = colOpts(false);
+  $('xls-col-amount').innerHTML = colOpts(false);
+  $('xls-col-date').innerHTML = colOpts(true);
+
+  autoDetectColumns();
+  xlsUpdatePreview();
 }
 
 function buildCategorySelect() {
@@ -2464,30 +2550,8 @@ function buildCategorySelect() {
 
 function loadXlsSheet(name) {
   const sheet = xlsState.workbook.Sheets[name];
-  const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, blankrows: false, defval: '' });
-  if (rows.length === 0) {
-    xlsState.rows = [];
-    xlsState.headers = [];
-    return;
-  }
-  xlsState.headers = rows[0].map(h => String(h).trim());
-  xlsState.rows = rows.slice(1);
-
-  // Build column dropdowns
-  const colOpts = (includeNone) => {
-    let o = includeNone ? '<option value="-1">— brak —</option>' : '';
-    xlsState.headers.forEach((h, i) => {
-      o += `<option value="${i}">${esc(h || `Kolumna ${i + 1}`)}</option>`;
-    });
-    return o;
-  };
-  $('xls-col-name').innerHTML = colOpts(false);
-  $('xls-col-amount').innerHTML = colOpts(false);
-  $('xls-col-date').innerHTML = colOpts(true);
-
-  // Auto-detect
-  autoDetectColumns();
-  xlsUpdatePreview();
+  const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, blankrows: false, defval: '', raw: true });
+  setSheetRows(rows);
 }
 
 function autoDetectColumns() {
@@ -2560,6 +2624,7 @@ function getXlsParsedRows() {
 }
 
 window.xlsReloadSheet = function() {
+  if (!xlsState.workbook) return; // CSV has a single sheet
   loadXlsSheet($('xls-sheet').value);
 };
 
