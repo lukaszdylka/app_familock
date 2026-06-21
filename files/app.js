@@ -206,25 +206,46 @@ function toast(msg, type = 'ok') {
 }
 
 // ── Save data ──
+let _cloudPushTimer = null;
+let _cloudPushPending = false;
+
 async function save() {
   try {
     localStorage.setItem('fl4', JSON.stringify(S));
     console.log('💾 Saved to localStorage');
-    
-    // Sync to cloud if enabled (check for window.pushToCloud function)
+
+    // Debounced cloud sync — batch rapid changes into one push
     if (typeof window.pushToCloud === 'function') {
-      const success = await window.pushToCloud();
-      if (success) {
-        console.log('☁️ Synced to cloud');
-      } else {
-        console.log('⚠️ Cloud sync failed, but local save OK');
-      }
+      _cloudPushPending = true;
+      if (_cloudPushTimer) clearTimeout(_cloudPushTimer);
+      _cloudPushTimer = setTimeout(async () => {
+        _cloudPushTimer = null;
+        _cloudPushPending = false;
+        try {
+          const success = await window.pushToCloud();
+          console.log(success ? '☁️ Synced to cloud' : '⚠️ Cloud sync failed, local OK');
+        } catch (e) {
+          console.log('⚠️ Cloud sync error, local OK:', e.message);
+        }
+      }, 1500);
     }
   } catch (err) {
     console.error('❌ Save error:', err);
     toast('Błąd zapisu', 'err');
   }
 }
+
+// Flush any pending cloud push immediately (e.g. before unload)
+window.flushCloudSync = async function() {
+  if (_cloudPushTimer) {
+    clearTimeout(_cloudPushTimer);
+    _cloudPushTimer = null;
+  }
+  if (_cloudPushPending && typeof window.pushToCloud === 'function') {
+    _cloudPushPending = false;
+    try { await window.pushToCloud(); } catch (e) {}
+  }
+};
 
 // Export to global scope
 window.save = save;
@@ -2740,6 +2761,11 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Setup spreadsheet import
     if (window.setupXlsImport) window.setupXlsImport();
+
+    // Flush pending cloud sync before leaving
+    window.addEventListener('beforeunload', () => {
+      if (window.flushCloudSync) window.flushCloudSync();
+    });
 
     console.log('✅ Familock ready!');
     toast('Aplikacja gotowa');
