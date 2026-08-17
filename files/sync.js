@@ -101,38 +101,33 @@ async function pullFromCloud() {
     if (error) throw error;
 
     if (data?.data) {
-      const cloudTime = new Date(data.updated_at);
-      const localSyncTime = localStorage.getItem('fl4_last_sync');
-      const localTime = localSyncTime ? new Date(localSyncTime) : new Date(0);
+      const cloudTime = new Date(data.updated_at).getTime();
+      const localSyncRaw = localStorage.getItem('fl4_last_sync');
+      // Add 5s buffer to avoid clock skew false negatives
+      const localTime = localSyncRaw ? new Date(localSyncRaw).getTime() - 5000 : 0;
 
-      // Use newer version
       if (cloudTime > localTime) {
         console.log('☁️ Cloud data is newer, pulling...');
-        
-        // Ensure migration fields exist
+
         const cloudData = data.data;
         if (!cloudData.remont) cloudData.remont = [];
         if (!cloudData.zakupy) cloudData.zakupy = [];
-        if (!cloudData.otc) cloudData.otc = [];
-        if (!cloudData.tasks) cloudData.tasks = [];
-        if (!cloudData.debts) cloudData.debts = [];
-        
-        // Run migration if needed
-        if (cloudData.otc && cloudData.otc.length > 0 && cloudData.remont.length === 0) {
-          console.log('📦 Migrating cloud data: otc → remont');
+        if (!cloudData.otc)    cloudData.otc = [];
+        if (!cloudData.tasks)  cloudData.tasks = [];
+        if (!cloudData.debts)  cloudData.debts = [];
+
+        if (cloudData.otc?.length > 0 && cloudData.remont.length === 0) {
           cloudData.remont = cloudData.otc;
           cloudData.zakupy = [];
           cloudData.otc = [];
         }
-        
-        // Update global S reference
+
         if (window.S) {
           Object.assign(window.S, cloudData);
         } else {
           window.S = cloudData;
         }
-        
-        // Save to localStorage
+
         localStorage.setItem('fl4', JSON.stringify(window.S));
         localStorage.setItem('fl4_last_sync', data.updated_at);
 
@@ -144,10 +139,16 @@ async function pullFromCloud() {
           window.renderDash();
         }
 
-        if (window.toast) window.toast('Pobrano dane z chmury');
+        if (window.toast) window.toast('📥 Pobrano dane z chmury');
       } else {
         console.log('📱 Local data is current');
+        // Still push local to cloud if cloud is empty
+        if (!data) await pushToCloud();
       }
+    } else {
+      // No cloud data yet → push local data to cloud
+      console.log('☁️ No cloud data, pushing local...');
+      await pushToCloud();
     }
   } catch (error) {
     console.error('Pull error:', error);
@@ -158,22 +159,20 @@ async function pullFromCloud() {
 async function onUserLogin() {
   syncEnabled = true;
   renderSyncUI();
-  
-  // Show main app (hide auth wall)
+
   if (window.showApp) window.showApp();
-  
-  // Pull latest data
+
+  // Always pull on login — don't rely on timestamp comparison alone
   await pullFromCloud();
 
-  // Subscribe to realtime updates
+  // Subscribe to realtime — channel name must be user-specific
   if (supabaseClient && currentUser) {
-    // Unsubscribe from previous channel if exists
     if (realtimeChannel) {
       supabaseClient.removeChannel(realtimeChannel);
     }
 
     realtimeChannel = supabaseClient
-      .channel('familock_changes')
+      .channel(`familock_${currentUser.id}`)
       .on(
         'postgres_changes',
         {
@@ -183,16 +182,18 @@ async function onUserLogin() {
           filter: `user_id=eq.${currentUser.id}`
         },
         async (payload) => {
-          console.log('🔄 Remote change detected');
+          console.log('🔄 Remote change detected, pulling...');
           await pullFromCloud();
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        console.log('Realtime status:', status);
+      });
 
-    console.log('✓ Realtime subscribed');
+    console.log('✓ Realtime subscribed for user:', currentUser.id);
   }
 
-  if (window.toast) window.toast('Zalogowano - synchronizacja włączona');
+  if (window.toast) window.toast('✓ Zalogowano · synchronizacja aktywna');
 }
 
 // ── User logged out ──
