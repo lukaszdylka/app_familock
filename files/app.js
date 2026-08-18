@@ -1238,6 +1238,7 @@ function renderSessions() {
       <thead>
         <tr>
           <th>Data</th>
+          <th style="color:var(--txm)">Godz.</th>
           <th style="text-align:center">Graczy</th>
           <th style="text-align:right">Przychód</th>
           <th style="text-align:right">Rabat</th>
@@ -1246,11 +1247,17 @@ function renderSessions() {
         </tr>
       </thead>
       <tbody>
-        ${sorted.map((s, idx) => {
+        ${sorted.map((s) => {
           const origIdx = S.sessions.indexOf(s);
+          // Count other sessions same day
+          const sameDayCount = sorted.filter(x => x.date === s.date).length;
+          const dayLabel = sameDayCount > 1
+            ? `<span style="font-size:10px;background:rgba(59,130,246,.15);color:#3b82f6;padding:1px 5px;border-radius:99px;margin-left:5px">${sameDayCount}×</span>`
+            : '';
           return `
             <tr onclick="editSession(${origIdx})" style="cursor:pointer">
-              <td>${s.date || '—'}</td>
+              <td>${s.date || '—'}${dayLabel}</td>
+              <td style="font-size:11px;color:var(--txm)">${s.hour || ''}</td>
               <td style="text-align:center">${s.players || 0}</td>
               <td class="num">${fmtPLN(s.revenue || 0)}</td>
               <td class="num">${s.discount > 0 ? `−${fmtPLN(s.discount)}` : '—'}</td>
@@ -1287,6 +1294,7 @@ window.toggleSessAdd = function() {
 
 window.saveSess = function() {
   const date = $('s-date').value;
+  const hour = $('s-hour').value;
   const players = parseInt($('s-players').value) || 0;
   const rev = parseFloat($('s-rev').value) || 0;
   const disc = parseFloat($('s-disc').value) || 0;
@@ -1300,6 +1308,7 @@ window.saveSess = function() {
   S.sessions.push({
     id: uid(),
     date,
+    hour: hour || '',
     players,
     revenue: rev,
     discount: disc,
@@ -1307,6 +1316,7 @@ window.saveSess = function() {
   });
   
   $('s-date').value = '';
+  $('s-hour').value = '';
   $('s-players').value = '';
   $('s-rev').value = '';
   $('s-disc').value = '0';
@@ -1319,8 +1329,57 @@ window.saveSess = function() {
 };
 
 window.editSession = function(idx) {
-  // Implement inline editing if needed
-  toast('Kliknij ✕ aby usunąć');
+  // Close any existing edit rows
+  document.querySelectorAll('.sess-edit-row').forEach(r => r.remove());
+
+  const s = S.sessions[idx];
+  if (!s) return;
+
+  // Find the row in the table
+  const rows = document.querySelectorAll('#s-table tbody tr');
+  let targetRow = null;
+  rows.forEach(r => {
+    if (r.getAttribute('onclick') === `editSession(${idx})`) targetRow = r;
+  });
+  if (!targetRow) return;
+
+  // Build edit row spanning full table
+  const editRow = document.createElement('tr');
+  editRow.className = 'sess-edit-row';
+  editRow.innerHTML = `
+    <td colspan="7">
+      <div class="sess-edit-inner">
+        <div class="field" style="margin:0"><label>Data</label><input type="date" id="se-date" value="${s.date || ''}"/></div>
+        <div class="field" style="margin:0"><label>Godz.</label><input type="time" id="se-hour" value="${s.hour || ''}"/></div>
+        <div class="field" style="margin:0"><label>Graczy</label><input type="number" id="se-players" value="${s.players || 0}" min="0" max="20"/></div>
+        <div class="field" style="margin:0"><label>Przychód</label><input type="number" id="se-rev" step="0.01" value="${s.revenue || 0}"/></div>
+        <div class="field" style="margin:0"><label>Rabat</label><input type="number" id="se-disc" step="0.01" value="${s.discount || 0}"/></div>
+        <div class="field" style="margin:0"><label>Notatka</label><input type="text" id="se-note" value="${esc(s.note || '')}"/></div>
+        <div style="display:flex;gap:5px;align-items:flex-end;padding-bottom:1px">
+          <button class="btn bp bsm" onclick="updateSession(${idx})">Zapisz</button>
+          <button class="btn bg bsm" onclick="this.closest('.sess-edit-row').remove()">Anuluj</button>
+        </div>
+      </div>
+    </td>
+  `;
+  targetRow.after(editRow);
+  editRow.querySelector('#se-date')?.focus();
+};
+
+window.updateSession = function(idx) {
+  const s = S.sessions[idx];
+  if (!s) return;
+  const rev = parseFloat($('se-rev').value) || 0;
+  if (rev <= 0) { toast('Podaj przychód', 'err'); return; }
+  s.date     = $('se-date').value;
+  s.hour     = $('se-hour').value || '';
+  s.players  = parseInt($('se-players').value) || 0;
+  s.revenue  = rev;
+  s.discount = parseFloat($('se-disc').value) || 0;
+  s.note     = $('se-note').value.trim();
+  save();
+  renderSessions();
+  toast('Zaktualizowano sesję');
 };
 
 window.deleteSession = function(idx) {
@@ -1354,9 +1413,13 @@ window.importCSV = function() {
       let skipped = 0;
       
       sessions.forEach(session => {
+        // Duplicate check: same date + same revenue + same note (room name)
+        // This allows two sessions same day same price if they're different rooms
         const exists = S.sessions.some(s => 
           s.date === session.date && 
-          Math.abs(s.revenue - session.revenue) < 0.01
+          Math.abs((s.revenue || 0) - (session.revenue || 0)) < 0.01 &&
+          (s.note || '') === (session.note || '') &&
+          (s.hour || '') === (session.hour || '')
         );
         
         if (!exists) {
@@ -1393,6 +1456,7 @@ function parseCSV(text) {
   
   // Find column indices
   const dateIdx = header.findIndex(h => h.includes('data') || h.includes('date'));
+  const hourIdx = header.findIndex(h => h === 'hour' || h === 'godzina' || h === 'czas');
   const playersIdx = header.findIndex(h => 
     h.includes('gracz') || h.includes('player') || h.includes('osób') || h.includes('people')
   );
@@ -1456,15 +1520,19 @@ function parseCSV(text) {
     // Parse players
     const players = playersIdx >= 0 ? parseInt(cols[playersIdx]) || 0 : 0;
     
-    // Parse note (room name from first column)
+    // Parse note (room name)
     const note = noteIdx >= 0 ? cols[noteIdx] : '';
+    
+    // Parse hour (used for duplicate detection when 2 sessions same day/price)
+    const hour = hourIdx >= 0 ? cols[hourIdx].substring(0, 5) : '';
     
     sessions.push({
       date,
       players,
       revenue,
       discount: 0,
-      note
+      note,
+      ...(hour ? { hour } : {})
     });
   }
   

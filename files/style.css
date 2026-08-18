@@ -1226,7 +1226,7 @@ hr.div {
 
 .sess-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr 80px 1.4fr auto;
+  grid-template-columns: 1fr 90px 80px 1fr 80px 1.4fr auto;
   gap: 9px;
   align-items: end;
 }
