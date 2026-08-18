@@ -1231,17 +1231,28 @@ function renderSessions() {
     return;
   }
   
+  const LOCKME_FEE = 0.14; // 14% prowizja LockMe
+
   const sorted = [...filtered].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
-  
+
+  // Count sessions per day for badge
+  const dayCount = {};
+  sorted.forEach(s => { dayCount[s.date] = (dayCount[s.date] || 0) + 1; });
+
+  const totalNet = filtered.reduce((sum, s) => {
+    const net = s.lockme ? (s.revenue * (1 - LOCKME_FEE)) : s.revenue;
+    return sum + net;
+  }, 0);
+
   $('s-table').innerHTML = `
     <table class="dt">
       <thead>
         <tr>
           <th>Data</th>
-          <th style="color:var(--txm)">Godz.</th>
+          <th>Godz.</th>
           <th style="text-align:center">Graczy</th>
           <th style="text-align:right">Przychód</th>
-          <th style="text-align:right">Rabat</th>
+          <th style="text-align:right">Netto</th>
           <th>Notatka</th>
           <th></th>
         </tr>
@@ -1249,18 +1260,22 @@ function renderSessions() {
       <tbody>
         ${sorted.map((s) => {
           const origIdx = S.sessions.indexOf(s);
-          // Count other sessions same day
-          const sameDayCount = sorted.filter(x => x.date === s.date).length;
-          const dayLabel = sameDayCount > 1
-            ? `<span style="font-size:10px;background:rgba(59,130,246,.15);color:#3b82f6;padding:1px 5px;border-radius:99px;margin-left:5px">${sameDayCount}×</span>`
+          const multi = dayCount[s.date] > 1
+            ? `<span class="day-badge">${dayCount[s.date]}×</span>`
             : '';
+          const net = s.lockme
+            ? s.revenue * (1 - LOCKME_FEE)
+            : s.revenue;
+          const netCell = s.lockme
+            ? `<span title="Po prowizji LockMe 14%">${fmtPLN(net)} <span style="font-size:10px;color:var(--txm)">LM</span></span>`
+            : `<span style="color:var(--txm)">—</span>`;
           return `
-            <tr onclick="editSession(${origIdx})" style="cursor:pointer">
-              <td>${s.date || '—'}${dayLabel}</td>
-              <td style="font-size:11px;color:var(--txm)">${s.hour || ''}</td>
+            <tr data-idx="${origIdx}" onclick="editSession(${origIdx})" style="cursor:pointer">
+              <td>${s.date || '—'}${multi}</td>
+              <td style="font-size:11px;color:var(--txm)">${s.hour || '—'}</td>
               <td style="text-align:center">${s.players || 0}</td>
               <td class="num">${fmtPLN(s.revenue || 0)}</td>
-              <td class="num">${s.discount > 0 ? `−${fmtPLN(s.discount)}` : '—'}</td>
+              <td class="num">${netCell}</td>
               <td style="font-size:11px;color:var(--txm)">${esc(s.note || '')}</td>
               <td class="acell">
                 <button class="btn bd" onclick="event.stopPropagation();deleteSession(${origIdx})">✕</button>
@@ -1271,10 +1286,13 @@ function renderSessions() {
       </tbody>
       <tfoot>
         <tr>
-          <td colspan="2">Razem</td>
+          <td colspan="3" style="color:var(--txm);font-size:11px">
+            ${filtered.some(s => s.lockme) ? '* netto po prowizji LockMe 14%' : ''}
+          </td>
           <td class="num">${fmtPLN(totalRev)}</td>
-          <td class="num">${totalDisc > 0 ? `−${fmtPLN(totalDisc)}` : ''}</td>
-          <td colspan="2" style="text-align:right">
+          <td class="num">${filtered.some(s => s.lockme) ? fmtPLN(totalNet) + '*' : '—'}</td>
+          <td></td>
+          <td style="text-align:right">
             <button class="btn" onclick="importCSV()" style="font-size:11px;padding:4px 8px">📄 Import CSV</button>
           </td>
         </tr>
@@ -1293,35 +1311,37 @@ window.toggleSessAdd = function() {
 };
 
 window.saveSess = function() {
-  const date = $('s-date').value;
-  const hour = $('s-hour').value;
+  const date    = $('s-date').value;
+  const hour    = $('s-hour').value;
   const players = parseInt($('s-players').value) || 0;
-  const rev = parseFloat($('s-rev').value) || 0;
-  const disc = parseFloat($('s-disc').value) || 0;
-  const note = $('s-note').value.trim();
-  
+  const rev     = parseFloat($('s-rev').value) || 0;
+  const disc    = parseFloat($('s-disc').value) || 0;
+  const lockme  = $('s-lockme').value === '1';
+  const note    = $('s-note').value.trim();
+
   if (!date || rev <= 0) {
     toast('Podaj datę i przychód', 'err');
     return;
   }
-  
+
   S.sessions.push({
-    id: uid(),
-    date,
-    hour: hour || '',
+    id: uid(), date,
+    hour:     hour || '',
     players,
-    revenue: rev,
+    revenue:  rev,
     discount: disc,
+    lockme:   lockme || undefined,
     note
   });
-  
-  $('s-date').value = '';
-  $('s-hour').value = '';
+
+  $('s-date').value    = '';
+  $('s-hour').value    = '';
   $('s-players').value = '';
-  $('s-rev').value = '';
-  $('s-disc').value = '0';
-  $('s-note').value = '';
-  
+  $('s-rev').value     = '';
+  $('s-disc').value    = '0';
+  $('s-lockme').value  = '0';
+  $('s-note').value    = '';
+
   toggleSessAdd();
   save();
   renderSessions();
@@ -1335,25 +1355,27 @@ window.editSession = function(idx) {
   const s = S.sessions[idx];
   if (!s) return;
 
-  // Find the row in the table
-  const rows = document.querySelectorAll('#s-table tbody tr');
-  let targetRow = null;
-  rows.forEach(r => {
-    if (r.getAttribute('onclick') === `editSession(${idx})`) targetRow = r;
-  });
+  // Find target row by data-idx attribute (reliable, unlike onclick string matching)
+  const targetRow = document.querySelector(`#s-table tr[data-idx="${idx}"]`);
   if (!targetRow) return;
 
-  // Build edit row spanning full table
   const editRow = document.createElement('tr');
   editRow.className = 'sess-edit-row';
   editRow.innerHTML = `
-    <td colspan="7">
+    <td colspan="7" style="padding:0">
       <div class="sess-edit-inner">
         <div class="field" style="margin:0"><label>Data</label><input type="date" id="se-date" value="${s.date || ''}"/></div>
         <div class="field" style="margin:0"><label>Godz.</label><input type="time" id="se-hour" value="${s.hour || ''}"/></div>
         <div class="field" style="margin:0"><label>Graczy</label><input type="number" id="se-players" value="${s.players || 0}" min="0" max="20"/></div>
-        <div class="field" style="margin:0"><label>Przychód</label><input type="number" id="se-rev" step="0.01" value="${s.revenue || 0}"/></div>
-        <div class="field" style="margin:0"><label>Rabat</label><input type="number" id="se-disc" step="0.01" value="${s.discount || 0}"/></div>
+        <div class="field" style="margin:0"><label>Przychód (zł)</label><input type="number" id="se-rev" step="0.01" value="${s.revenue || 0}"/></div>
+        <div class="field" style="margin:0"><label>Rabat (zł)</label><input type="number" id="se-disc" step="0.01" value="${s.discount || 0}"/></div>
+        <div class="field" style="margin:0">
+          <label>Płatność</label>
+          <select id="se-lockme">
+            <option value="0" ${!s.lockme ? 'selected' : ''}>Gotówka / terminal</option>
+            <option value="1" ${s.lockme  ? 'selected' : ''}>Online LockMe (−14%)</option>
+          </select>
+        </div>
         <div class="field" style="margin:0"><label>Notatka</label><input type="text" id="se-note" value="${esc(s.note || '')}"/></div>
         <div style="display:flex;gap:5px;align-items:flex-end;padding-bottom:1px">
           <button class="btn bp bsm" onclick="updateSession(${idx})">Zapisz</button>
@@ -1377,6 +1399,7 @@ window.updateSession = function(idx) {
   s.revenue  = rev;
   s.discount = parseFloat($('se-disc').value) || 0;
   s.note     = $('se-note').value.trim();
+  s.lockme   = $('se-lockme').value === '1';
   save();
   renderSessions();
   toast('Zaktualizowano sesję');
@@ -1470,17 +1493,20 @@ function parseCSV(text) {
   const header = lines[0].split(/[,;|\t]/).map(h => h.trim().toLowerCase().replace(/"/g, ''));
   
   // Find column indices
-  const dateIdx = header.findIndex(h => h.includes('data') || h.includes('date'));
-  const hourIdx = header.findIndex(h => h === 'hour' || h === 'godzina' || h === 'czas');
-  const playersIdx = header.findIndex(h => 
+  const dateIdx    = header.findIndex(h => h.includes('data') || h.includes('date'));
+  const hourIdx    = header.findIndex(h => h === 'hour' || h === 'godzina' || h === 'czas');
+  const playersIdx = header.findIndex(h =>
     h.includes('gracz') || h.includes('player') || h.includes('osób') || h.includes('people')
   );
-  const revenueIdx = header.findIndex(h => 
+  const revenueIdx = header.findIndex(h =>
     h.includes('income') || h.includes('przychód') || h.includes('revenue') ||
     h.includes('cena') || h.includes('price') || h.includes('kwota') || h.includes('amount')
   );
-  const noteIdx = header.findIndex(h => 
+  const noteIdx    = header.findIndex(h =>
     h.includes('pokój') || h.includes('room') || h.includes('nazwa') || h.includes('name')
+  );
+  const paymentIdx = header.findIndex(h =>
+    h.includes('payment') || h.includes('płatność') || h.includes('platnosc')
   );
   
   if (dateIdx === -1 || revenueIdx === -1) {
@@ -1538,16 +1564,24 @@ function parseCSV(text) {
     // Parse note (room name)
     const note = noteIdx >= 0 ? cols[noteIdx] : '';
     
-    // Parse hour (used for duplicate detection when 2 sessions same day/price)
+    // Parse hour
     const hour = hourIdx >= 0 ? cols[hourIdx].substring(0, 5) : '';
-    
+
+    // Parse payment type — "On-line" = LockMe online payment → prowizja 14%
+    let lockme = false;
+    if (paymentIdx >= 0) {
+      const pmt = (cols[paymentIdx] || '').toLowerCase();
+      lockme = pmt.includes('on-line') || pmt.includes('online');
+    }
+
     sessions.push({
       date,
       players,
       revenue,
       discount: 0,
       note,
-      ...(hour ? { hour } : {})
+      ...(hour   ? { hour }        : {}),
+      ...(lockme  ? { lockme: true } : {})
     });
   }
   

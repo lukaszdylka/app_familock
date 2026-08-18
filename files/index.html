@@ -252,6 +252,12 @@
       <div class="field" style="margin:0"><label>Graczy</label><input type="number" id="s-players" min="1" max="16" placeholder="4"/></div>
       <div class="field" style="margin:0"><label>Przychód (zł)</label><input type="number" id="s-rev" step="0.01" placeholder="220"/></div>
       <div class="field" style="margin:0"><label>Rabat (zł)</label><input type="number" id="s-disc" step="0.01" placeholder="0" min="0"/></div>
+      <div class="field" style="margin:0"><label>Płatność</label>
+        <select id="s-lockme">
+          <option value="0">Gotówka / terminal</option>
+          <option value="1">Online LockMe (−14%)</option>
+        </select>
+      </div>
       <div class="field" style="margin:0"><label>Notatka</label><input type="text" id="s-note" placeholder="urodziny, bon, grupowy…"/></div>
       <div style="padding-bottom:1px;display:flex;gap:5px">
         <button class="btn bp bsm" onclick="saveSess()">Zapisz</button>
