@@ -1398,47 +1398,62 @@ window.importCSV = function() {
   input.onchange = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    
+
     try {
       const text = await file.text();
       const sessions = parseCSV(text);
-      
+
       if (sessions.length === 0) {
         toast('Nie znaleziono sesji w CSV', 'err');
         return;
       }
-      
-      // Duplicate detection - check by date
-      let added = 0;
-      let skipped = 0;
-      
+
+      // Ask user: merge or replace?
+      const replace = S.sessions.length > 0 && confirm(
+        `Masz już ${S.sessions.length} sesji.\n\n` +
+        `OK = ZASTĄP wszystkie danymi z CSV (${sessions.length} sesji)\n` +
+        `Anuluj = DOŁĄCZ nowe (duplikaty pominięte)`
+      );
+
+      if (replace) {
+        S.sessions = sessions.map(s => ({ id: uid(), ...s }));
+        save();
+        renderSessions();
+        toast(`✓ Zastąpiono sesje · ${sessions.length} zaimportowano`);
+        return;
+      }
+
+      // Merge mode — smarter dedup
+      let added = 0, skipped = 0;
+
       sessions.forEach(session => {
-        // Duplicate check: same date + same revenue + same note (room name)
-        // This allows two sessions same day same price if they're different rooms
-        const exists = S.sessions.some(s => 
-          s.date === session.date && 
-          Math.abs((s.revenue || 0) - (session.revenue || 0)) < 0.01 &&
-          (s.note || '') === (session.note || '') &&
-          (s.hour || '') === (session.hour || '')
-        );
-        
+        // Primary key: date + hour + note (pokój)
+        // If CSV has hour → match on date+hour+note
+        // If no hour → match on date+note+revenue (fallback)
+        const exists = S.sessions.some(s => {
+          if (session.hour && s.hour) {
+            // Both have hour — most precise match
+            return s.date === session.date &&
+                   s.hour === session.hour &&
+                   (s.note || '') === (session.note || '');
+          }
+          // Fallback: date + note + revenue
+          return s.date === session.date &&
+                 (s.note || '') === (session.note || '') &&
+                 Math.abs((s.revenue || 0) - (session.revenue || 0)) < 0.01;
+        });
+
         if (!exists) {
-          S.sessions.push({
-            id: uid(),
-            ...session
-          });
+          S.sessions.push({ id: uid(), ...session });
           added++;
         } else {
           skipped++;
         }
       });
-      
-      if (added > 0) {
-        save();
-        renderSessions();
-      }
-      
+
+      if (added > 0) { save(); renderSessions(); }
       toast(`✓ Zaimportowano ${added} sesji${skipped > 0 ? ` (pominięto ${skipped} duplikatów)` : ''}`);
+
     } catch (err) {
       console.error('CSV import error:', err);
       toast('Błąd parsowania CSV', 'err');
