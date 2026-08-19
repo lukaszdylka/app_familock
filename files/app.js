@@ -1247,7 +1247,7 @@ function renderSessions() {
   const dayCount = {};
   sorted.forEach(s => { dayCount[s.date] = (dayCount[s.date] || 0) + 1; });
 
-  const totalNet = filtered.reduce((sum, s) => {
+  const totalNet = liveFiltered.reduce((sum, s) => {
     const net = s.lockme ? (s.revenue * (1 - LOCKME_FEE)) : s.revenue;
     return sum + net;
   }, 0);
@@ -1320,10 +1320,10 @@ function renderSessions() {
       <tfoot>
         <tr>
           <td colspan="3" style="color:var(--txm);font-size:11px">
-            ${filtered.some(s => s.lockme) ? '* netto po prowizji LockMe 14%' : ''}
+            ${liveFiltered.some(s => s.lockme) ? '* netto po prowizji LockMe 14%' : ''}
           </td>
           <td class="num">${fmtPLN(totalRev)}</td>
-          <td class="num">${filtered.some(s => s.lockme) ? fmtPLN(totalNet) + '*' : '—'}</td>
+          <td class="num">${liveFiltered.some(s => s.lockme) ? fmtPLN(totalNet) + '*' : '—'}</td>
           <td></td>
           <td style="text-align:right">
             <button class="btn" onclick="importCSV()" style="font-size:11px;padding:4px 8px">📄 Import CSV</button>
