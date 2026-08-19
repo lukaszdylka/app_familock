@@ -266,7 +266,8 @@ const otcTotal = () => remontTotal() + zakupyTotal(); // Combined for backward c
 
 const totalCosts = () => rentTotal() + utilTotal() + otcTotal();
 
-const totalRevenue = () => S.sessions.reduce((s, x) => s + (Number(x.revenue) || 0), 0);
+const liveSessions = () => S.sessions.filter(x => !x.test);
+const totalRevenue = () => liveSessions().reduce((s, x) => s + (Number(x.revenue) || 0), 0);
 
 const totalBalance = () => totalRevenue() - totalCosts();
 
@@ -328,7 +329,8 @@ function renderDash() {
   const costs = totalCosts();
   const rev = totalRevenue();
   const bal = totalBalance();
-  const cnt = S.sessions.length;
+  const live = liveSessions();
+  const cnt = live.length;
   
   // Update name and date
   set('d-name', S.settings.name || 'Familock');
@@ -357,14 +359,14 @@ function renderDash() {
   const avgRev = cnt > 0 ? rev / cnt : 0;
   set('k-avg', fmtPLN(avgRev, 2));
   
-  const avgDisc = cnt > 0 
-    ? S.sessions.reduce((s, x) => s + (Number(x.discount) || 0), 0) / cnt
+  const avgDisc = cnt > 0
+    ? live.reduce((s, x) => s + (Number(x.discount) || 0), 0) / cnt
     : 0;
   set('k-avg-disc', avgDisc > 0 ? `(rabat śr. ${fmtPLN(avgDisc, 2)})` : '');
   
   // This month
   const ym = thisYM();
-  const thisMonth = S.sessions.filter(s => s.date?.startsWith(ym));
+  const thisMonth = live.filter(s => s.date?.startsWith(ym));
   const thisMonthRev = thisMonth.reduce((s, x) => s + (Number(x.revenue) || 0), 0);
   set('k-thismonth', thisMonth.length);
   set('k-thismonth-s', fmtPLN(thisMonthRev));
@@ -1220,11 +1222,17 @@ function renderSessions() {
   const filtered = filter
     ? S.sessions.filter(s => s.date?.startsWith(filter))
     : S.sessions;
-  
-  const totalRev = filtered.reduce((s, x) => s + (Number(x.revenue) || 0), 0);
-  const totalDisc = filtered.reduce((s, x) => s + (Number(x.discount) || 0), 0);
-  
-  set('s-sum', `${filtered.length} sesji · ${fmtPLN(totalRev)} ${totalDisc > 0 ? `(rabaty: ${fmtPLN(totalDisc)})` : ''}`);
+
+  // Only live (non-test) sessions count toward totals
+  const liveFiltered = filtered.filter(s => !s.test);
+  const totalRev  = liveFiltered.reduce((s, x) => s + (Number(x.revenue) || 0), 0);
+  const totalDisc = liveFiltered.reduce((s, x) => s + (Number(x.discount) || 0), 0);
+  const testCount = filtered.length - liveFiltered.length;
+
+  const sumLabel = `${liveFiltered.length} sesji · ${fmtPLN(totalRev)}`
+    + (totalDisc > 0 ? ` (rabaty: ${fmtPLN(totalDisc)})` : '')
+    + (testCount > 0 ? ` · <span style="color:var(--txm)">${testCount} testowa</span>` : '');
+  set('s-sum', sumLabel);
   
   if (filtered.length === 0) {
     $('s-table').innerHTML = '<div class="empty"><div class="empty-ic">◎</div><div class="empty-tx">Brak sesji<br><button class="btn" style="margin-top:12px" onclick="importCSV()">📄 Import CSV</button></div></div>';
@@ -1287,16 +1295,20 @@ function renderSessions() {
             ? `<span title="Po prowizji LockMe 14%">${fmtPLN(net)}</span>`
             : `<span style="color:var(--txm)">—</span>`;
 
+          const testBadge = s.test
+            ? `<span class="src-badge" style="background:rgba(239,68,68,.12);color:#ef4444">TEST</span>`
+            : '';
+
           return `
-            <tr data-idx="${origIdx}" onclick="editSession(${origIdx})" style="cursor:pointer">
+            <tr data-idx="${origIdx}" onclick="editSession(${origIdx})" style="cursor:pointer${s.test ? ';opacity:.5' : ''}">
               <td>${s.date || '—'}${multi}</td>
               <td style="font-size:11px;color:var(--txm)">${s.hour || '—'}</td>
               <td style="text-align:center">${s.players || 0}</td>
-              <td class="num">${fmtPLN(s.revenue || 0)}</td>
+              <td class="num">${s.test ? `<s>${fmtPLN(s.revenue || 0)}</s>` : fmtPLN(s.revenue || 0)}</td>
               <td class="num">${netCell}</td>
               <td>
                 <div style="font-size:11px;color:var(--txm)">${esc(s.note || '')}</div>
-                <div style="display:flex;gap:3px;margin-top:3px;flex-wrap:wrap">${srcBadge}${pmtBadge}</div>
+                <div style="display:flex;gap:3px;margin-top:3px;flex-wrap:wrap">${srcBadge}${pmtBadge}${testBadge}</div>
               </td>
               <td class="acell">
                 <button class="btn bd" onclick="event.stopPropagation();deleteSession(${origIdx})">✕</button>
@@ -1410,6 +1422,10 @@ window.editSession = function(idx) {
         <div class="field" style="margin:0"><label>Email</label><input type="email" id="se-email" value="${esc(s.email || '')}" placeholder="klient@email.com"/></div>
         <div class="field" style="margin:0"><label>Telefon</label><input type="tel" id="se-phone" value="${esc(s.phone || '')}" placeholder="+48 000 000 000"/></div>
         <div style="display:flex;gap:5px;align-items:flex-end;padding-bottom:1px">
+          <label style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--txm);cursor:pointer;white-space:nowrap">
+            <input type="checkbox" id="se-test" ${s.test ? 'checked' : ''}/>
+            Testowa (nie liczyć)
+          </label>
           <button class="btn bp bsm" onclick="updateSession(${idx})">Zapisz</button>
           <button class="btn bg bsm" onclick="this.closest('.sess-edit-row').remove()">Anuluj</button>
           ${s.phone ? `<a class="btn bg bsm" href="tel:${esc(s.phone)}" onclick="event.stopPropagation()">📞</a>` : ''}
@@ -1437,6 +1453,7 @@ window.updateSession = function(idx) {
   s.source   = $('se-source')?.value || '';
   s.email    = $('se-email')?.value.trim() || '';
   s.phone    = $('se-phone')?.value.trim() || '';
+  s.test     = $('se-test')?.checked || false;
   save();
   renderSessions();
   toast('Zaktualizowano sesję');
