@@ -1263,12 +1263,30 @@ function renderSessions() {
           const multi = dayCount[s.date] > 1
             ? `<span class="day-badge">${dayCount[s.date]}×</span>`
             : '';
-          const net = s.lockme
-            ? s.revenue * (1 - LOCKME_FEE)
-            : s.revenue;
+
+          // Source badge
+          const srcMap = {
+            panel:  { label: 'Cockpit', cls: 'src-panel' },
+            web:    { label: 'LockMe',  cls: 'src-web'   },
+            widget: { label: 'Widget',  cls: 'src-widget' },
+          };
+          const srcInfo = srcMap[s.source] || null;
+          const srcBadge = srcInfo
+            ? `<span class="src-badge ${srcInfo.cls}">${srcInfo.label}</span>`
+            : '';
+
+          // Payment badge
+          const pmtBadge = s.lockme
+            ? `<span class="src-badge src-online">Online</span>`
+            : s.payment === 'on-site'
+              ? `<span class="src-badge src-onsite">Wizyta</span>`
+              : '';
+
+          const net = s.lockme ? s.revenue * (1 - LOCKME_FEE) : s.revenue;
           const netCell = s.lockme
-            ? `<span title="Po prowizji LockMe 14%">${fmtPLN(net)} <span style="font-size:10px;color:var(--txm)">LM</span></span>`
+            ? `<span title="Po prowizji LockMe 14%">${fmtPLN(net)}</span>`
             : `<span style="color:var(--txm)">—</span>`;
+
           return `
             <tr data-idx="${origIdx}" onclick="editSession(${origIdx})" style="cursor:pointer">
               <td>${s.date || '—'}${multi}</td>
@@ -1276,7 +1294,10 @@ function renderSessions() {
               <td style="text-align:center">${s.players || 0}</td>
               <td class="num">${fmtPLN(s.revenue || 0)}</td>
               <td class="num">${netCell}</td>
-              <td style="font-size:11px;color:var(--txm)">${esc(s.note || '')}</td>
+              <td>
+                <div style="font-size:11px;color:var(--txm)">${esc(s.note || '')}</div>
+                <div style="display:flex;gap:3px;margin-top:3px;flex-wrap:wrap">${srcBadge}${pmtBadge}</div>
+              </td>
               <td class="acell">
                 <button class="btn bd" onclick="event.stopPropagation();deleteSession(${origIdx})">✕</button>
               </td>
@@ -1376,10 +1397,23 @@ window.editSession = function(idx) {
             <option value="1" ${s.lockme  ? 'selected' : ''}>Online LockMe (−14%)</option>
           </select>
         </div>
+        <div class="field" style="margin:0">
+          <label>Źródło</label>
+          <select id="se-source">
+            <option value="" ${!s.source ? 'selected' : ''}>— nieznane —</option>
+            <option value="panel"  ${s.source==='panel'  ? 'selected' : ''}>Cockpit (bezpośrednia)</option>
+            <option value="web"    ${s.source==='web'    ? 'selected' : ''}>LockMe.pl</option>
+            <option value="widget" ${s.source==='widget' ? 'selected' : ''}>Widget na stronie</option>
+          </select>
+        </div>
         <div class="field" style="margin:0"><label>Notatka</label><input type="text" id="se-note" value="${esc(s.note || '')}"/></div>
+        <div class="field" style="margin:0"><label>Email</label><input type="email" id="se-email" value="${esc(s.email || '')}" placeholder="klient@email.com"/></div>
+        <div class="field" style="margin:0"><label>Telefon</label><input type="tel" id="se-phone" value="${esc(s.phone || '')}" placeholder="+48 000 000 000"/></div>
         <div style="display:flex;gap:5px;align-items:flex-end;padding-bottom:1px">
           <button class="btn bp bsm" onclick="updateSession(${idx})">Zapisz</button>
           <button class="btn bg bsm" onclick="this.closest('.sess-edit-row').remove()">Anuluj</button>
+          ${s.phone ? `<a class="btn bg bsm" href="tel:${esc(s.phone)}" onclick="event.stopPropagation()">📞</a>` : ''}
+          ${s.email ? `<a class="btn bg bsm" href="mailto:${esc(s.email)}" onclick="event.stopPropagation()">✉</a>` : ''}
         </div>
       </div>
     </td>
@@ -1400,6 +1434,9 @@ window.updateSession = function(idx) {
   s.discount = parseFloat($('se-disc').value) || 0;
   s.note     = $('se-note').value.trim();
   s.lockme   = $('se-lockme').value === '1';
+  s.source   = $('se-source')?.value || '';
+  s.email    = $('se-email')?.value.trim() || '';
+  s.phone    = $('se-phone')?.value.trim() || '';
   save();
   renderSessions();
   toast('Zaktualizowano sesję');
@@ -1503,11 +1540,16 @@ function parseCSV(text) {
     h.includes('cena') || h.includes('price') || h.includes('kwota') || h.includes('amount')
   );
   const noteIdx    = header.findIndex(h =>
-    h.includes('pokój') || h.includes('room') || h.includes('nazwa') || h.includes('name')
+    h.includes('pokój') || h.includes('room')
   );
+  const nameIdx    = header.findIndex(h => h === 'name' || h === 'imię' || h === 'imie');
+  const surnameIdx = header.findIndex(h => h === 'surname' || h === 'nazwisko');
   const paymentIdx = header.findIndex(h =>
     h.includes('payment') || h.includes('płatność') || h.includes('platnosc')
   );
+  const sourceIdx  = header.findIndex(h => h === 'source' || h === 'źródło' || h === 'zrodlo');
+  const emailIdx   = header.findIndex(h => h === 'email' || h.includes('e-mail'));
+  const phoneIdx   = header.findIndex(h => h.includes('phone') || h === 'telefon');
   
   if (dateIdx === -1 || revenueIdx === -1) {
     throw new Error('Nie znaleziono kolumn Data i Income/Przychód');
@@ -1561,18 +1603,31 @@ function parseCSV(text) {
     // Parse players
     const players = playersIdx >= 0 ? parseInt(cols[playersIdx]) || 0 : 0;
     
-    // Parse note (room name)
-    const note = noteIdx >= 0 ? cols[noteIdx] : '';
+    // Build note: "Jan Kowalski · Starzik" or just room/name if only one exists
+    const firstName = nameIdx >= 0 ? cols[nameIdx].trim() : '';
+    const lastName  = surnameIdx >= 0 ? cols[surnameIdx].trim() : '';
+    const room      = noteIdx >= 0 ? cols[noteIdx].trim() : '';
+    const person    = [firstName, lastName].filter(Boolean).join(' ');
+    const note      = [person, room].filter(Boolean).join(' · ');
     
     // Parse hour
     const hour = hourIdx >= 0 ? cols[hourIdx].substring(0, 5) : '';
 
-    // Parse payment type — "On-line" = LockMe online payment → prowizja 14%
+    // Parse payment type
     let lockme = false;
+    let paymentLabel = '';
     if (paymentIdx >= 0) {
       const pmt = (cols[paymentIdx] || '').toLowerCase();
       lockme = pmt.includes('on-line') || pmt.includes('online');
+      paymentLabel = lockme ? 'online' : 'on-site';
     }
+
+    // Parse source
+    const source = sourceIdx >= 0 ? (cols[sourceIdx] || '').toLowerCase().trim() : '';
+
+    // Parse email + phone
+    const email = emailIdx >= 0 ? cols[emailIdx].trim() : '';
+    const phone = phoneIdx >= 0 ? cols[phoneIdx].trim() : '';
 
     sessions.push({
       date,
@@ -1580,8 +1635,12 @@ function parseCSV(text) {
       revenue,
       discount: 0,
       note,
-      ...(hour   ? { hour }        : {}),
-      ...(lockme  ? { lockme: true } : {})
+      ...(hour         ? { hour }            : {}),
+      ...(lockme       ? { lockme: true }     : {}),
+      ...(paymentLabel ? { payment: paymentLabel } : {}),
+      ...(source       ? { source }           : {}),
+      ...(email        ? { email }            : {}),
+      ...(phone        ? { phone }            : {})
     });
   }
   
