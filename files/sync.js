@@ -400,12 +400,37 @@ window.syncEnabled = () => syncEnabled;
 
 console.log('📡 Sync module loaded');
 
+// Small UI safeguard: app.js intentionally writes session summaries through
+// textContent. Older test-session formatting accidentally included a literal
+// <span> tag, so normalize only that label after each render.
+function fixSessionSummaryLabel() {
+  const el = document.getElementById('s-sum');
+  if (!el) return;
+  const text = String(el.textContent || '');
+  const match = text.match(/^(.*?)\s*·\s*<span style="color:var\(--txm\)">(\d+) testowa<\/span>\s*$/);
+  if (!match) return;
+  const count = Number(match[2] || 0);
+  const word = count === 1 ? 'testowa' : (count >= 2 && count <= 4 ? 'testowe' : 'testowych');
+  el.textContent = `${match[1]} · ${count} ${word}`;
+}
+
+function installSessionSummaryFix() {
+  const el = document.getElementById('s-sum');
+  if (!el || el.dataset.summaryFix === '1') return;
+  el.dataset.summaryFix = '1';
+  const observer = new MutationObserver(() => fixSessionSummaryLabel());
+  observer.observe(el, { childList: true, characterData: true, subtree: true });
+  fixSessionSummaryLabel();
+}
+
 // Render sync widget immediately when DOM is ready
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', () => {
     renderSyncUI();
+    installSessionSummaryFix();
   });
 } else {
   // DOM already loaded
   renderSyncUI();
+  installSessionSummaryFix();
 }
