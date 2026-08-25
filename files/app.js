@@ -1371,7 +1371,7 @@ window.saveSess = function() {
   const rev = isVoucher ? 0 : (parseFloat($('s-rev').value) || 0);
 
   if (!date) { toast('Podaj datę', 'err'); return; }
-  if (!isVoucher && rev <= 0) { toast('Podaj przychód', 'err'); return; }
+  if (!isVoucher && rev < 0) { toast('Podaj przychód', 'err'); return; }
   if (isVoucher && !voucherId) { toast('Wybierz voucher', 'err'); return; }
 
   // Find voucher and get its code
@@ -1494,7 +1494,7 @@ window.updateSession = function(idx) {
   const isVoucher = payType === 'voucher';
   const isLockme  = payType === '1';
   const rev = isVoucher ? 0 : (parseFloat($('se-rev').value) || 0);
-  if (!isVoucher && rev <= 0) { toast('Podaj przychód', 'err'); return; }
+  if (!isVoucher && rev < 0) { toast('Podaj przychód', 'err'); return; }
 
   // Handle voucher change — unmark old voucher if changed
   if (s.voucherId && (!isVoucher || $(`se-voucher-id-${idx}`)?.value !== s.voucherId)) {
