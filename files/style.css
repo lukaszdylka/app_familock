@@ -1812,3 +1812,22 @@ hr.div {
 .src-widget { background: rgba(168,85,247,.15);  color: #a855f7; }
 .src-online { background: rgba(34,197,94,.15);   color: #22c55e; }
 .src-onsite { background: rgba(234,179,8,.15);   color: #eab308; }
+
+/* ── Vouchers ── */
+.voucher-add-grid {
+  display: grid;
+  grid-template-columns: 120px 1fr 1fr 1.4fr 1.6fr auto;
+  gap: 9px;
+  align-items: end;
+}
+
+.src-voucher {
+  background: rgba(251,191,36,.15);
+  color: #f59e0b;
+}
+
+@media (max-width: 760px) {
+  .voucher-add-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}

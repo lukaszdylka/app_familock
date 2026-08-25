@@ -68,6 +68,7 @@
     <div class="ni" data-tab="analytics"><span class="ni-ic">◑</span>Analityka</div>
     <div class="ni" data-tab="tasks"><span class="ni-ic">☐</span>Zadania</div>
     <div class="ni" data-tab="debts"><span class="ni-ic">⚖</span>Długi</div>
+    <div class="ni" data-tab="vouchers"><span class="ni-ic">🎟</span>Vouchery</div>
     <div class="ni" data-tab="settings"><span class="ni-ic">◧</span>Ustawienia</div>
   </div>
   <div class="sb-ft">Familock v4.1 + Cloud<br>Synchronizacja opcjonalna</div>
@@ -81,6 +82,7 @@
   <button class="mni" data-tab="analytics"><span class="mni-ic">◑</span>Analityka</button>
   <button class="mni" data-tab="tasks"><span class="mni-ic">☐</span>Zadania</button>
   <button class="mni" data-tab="debts"><span class="mni-ic">⚖</span>Długi</button>
+  <button class="mni" data-tab="vouchers"><span class="mni-ic">🎟</span>Vouchery</button>
   <button class="mni" data-tab="settings"><span class="mni-ic">◧</span>Ustaw.</button>
 </div></div>
 
@@ -253,10 +255,14 @@
       <div class="field" style="margin:0"><label>Przychód (zł)</label><input type="number" id="s-rev" step="0.01" placeholder="220"/></div>
       <div class="field" style="margin:0"><label>Rabat (zł)</label><input type="number" id="s-disc" step="0.01" placeholder="0" min="0"/></div>
       <div class="field" style="margin:0"><label>Płatność</label>
-        <select id="s-lockme">
+        <select id="s-lockme" onchange="onSessionPaymentChange()">
           <option value="0">Gotówka / terminal</option>
           <option value="1">Online LockMe (−14%)</option>
+          <option value="voucher">Voucher</option>
         </select>
+      </div>
+      <div class="field" id="s-voucher-field" style="margin:0;display:none"><label>Wybierz voucher</label>
+        <select id="s-voucher-id"></select>
       </div>
       <div class="field" style="margin:0"><label>Notatka</label><input type="text" id="s-note" placeholder="urodziny, bon, grupowy…"/></div>
       <div style="padding-bottom:1px;display:flex;gap:5px">
@@ -381,6 +387,46 @@
   <div class="card">
     <div id="debt-list"></div>
   </div>
+</div>
+
+<!-- ══ VOUCHERY ══════════════════════════════════════════════════ -->
+<div class="pg" id="pg-vouchers">
+  <div class="ph frow">
+    <div><div class="pt">Vouchery</div><div class="ps">Sprzedane vouchery · status wykorzystania · przychody</div></div>
+    <button class="btn bp" onclick="addVoucher()">+ Sprzedaj voucher</button>
+  </div>
+
+  <!-- Summary -->
+  <div class="card mb4" style="max-width:680px">
+    <div class="ct"><span class="ct-ic">🎟</span>Podsumowanie</div>
+    <div class="sum-lbl">Łączna sprzedaż voucherów</div>
+    <div class="sum-big" id="v-total">0 zł</div>
+    <div class="mt3 sum-box">
+      <div class="sum-row"><span class="sum-row-l">Aktywne (niewykorzystane)</span><span class="sum-row-v" id="v-active">—</span></div>
+      <div class="sum-row"><span class="sum-row-l">Wykorzystane</span><span class="sum-row-v" id="v-used">—</span></div>
+      <div class="sum-row"><span class="sum-row-l">Wygasłe</span><span class="sum-row-v" id="v-expired">—</span></div>
+      <div class="sum-row"><span class="sum-row-l">Wartość aktywnych</span><span class="sum-row-v" id="v-active-val">—</span></div>
+    </div>
+  </div>
+
+  <!-- Add form (hidden) -->
+  <div class="sess-add" id="voucher-add">
+    <div style="font-size:10px;font-weight:700;color:var(--txm);margin-bottom:9px;text-transform:uppercase;letter-spacing:.09em">Nowy voucher</div>
+    <div class="voucher-add-grid">
+      <div class="field" style="margin:0"><label>Wartość (zł)</label><input type="number" id="v-value" step="0.01" placeholder="200"/></div>
+      <div class="field" style="margin:0"><label>Data sprzedaży</label><input type="date" id="v-date"/></div>
+      <div class="field" style="margin:0"><label>Ważny do</label><input type="date" id="v-expires"/></div>
+      <div class="field" style="margin:0"><label>Kupujący (opcjonalnie)</label><input type="text" id="v-buyer" placeholder="Jan Kowalski"/></div>
+      <div class="field" style="margin:0"><label>Notatka</label><input type="text" id="v-note" placeholder="prezent urodzinowy…"/></div>
+      <div style="padding-bottom:1px;display:flex;gap:5px;align-items:flex-end">
+        <button class="btn bp bsm" onclick="saveVoucher()">Zapisz</button>
+        <button class="btn bg bsm" onclick="toggleVoucherAdd()">Anuluj</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- List -->
+  <div class="card" id="voucher-list"></div>
 </div>
 
 <!-- ══ SETTINGS ══════════════════════════════════════════════════ -->

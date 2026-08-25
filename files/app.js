@@ -91,6 +91,7 @@ const DEF = {
   sessions: [],
   tasks: [],
   debts: [],
+  vouchers: [],
   settings: {
     avgGame: 220,
     targetSessions: 20,
@@ -126,6 +127,8 @@ try {
     if (!S.tasks) S.tasks = [];
     // Ensure debts array exists
     if (!S.debts) S.debts = [];
+    // Ensure vouchers array exists
+    if (!S.vouchers) S.vouchers = [];
     console.log('✓ Data loaded:', S.sessions?.length || 0, 'sessions');
   } else {
     S = JSON.parse(JSON.stringify(DEF));
@@ -305,6 +308,7 @@ function renderTab(tab) {
     analytics: renderAnalytics,
     tasks: renderTasks,
     debts: renderDebts,
+    vouchers: renderVouchers,
     settings: renderSettings
   };
   
@@ -370,6 +374,13 @@ function renderDash() {
   const thisMonthRev = thisMonth.reduce((s, x) => s + (Number(x.revenue) || 0), 0);
   set('k-thismonth', thisMonth.length);
   set('k-thismonth-s', fmtPLN(thisMonthRev));
+
+  // Voucher revenue (sold, not used — already counted at sale)
+  const voucherRev = S.vouchers.reduce((s, v) => s + (Number(v.value) || 0), 0);
+  const voucherActive = S.vouchers.filter(v => voucherStatus(v) === 'active').length;
+  if ($('k-vouchers')) {
+    set('k-vouchers', `${fmtPLN(voucherRev)} (${voucherActive} aktywnych)`);
+  }
   
   // Progress bar
   const pct = costs > 0 ? Math.min((rev / costs) * 100, 100) : 0;
@@ -1288,7 +1299,9 @@ function renderSessions() {
             ? `<span class="src-badge src-online">Online</span>`
             : s.payment === 'on-site'
               ? `<span class="src-badge src-onsite">Wizyta</span>`
-              : '';
+              : s.payment === 'voucher'
+                ? `<span class="src-badge src-voucher">🎟 ${esc(s.voucherCode || 'Voucher')}</span>`
+                : '';
 
           const net = s.lockme ? s.revenue * (1 - LOCKME_FEE) : s.revenue;
           const netCell = s.lockme
@@ -1347,38 +1360,62 @@ window.saveSess = function() {
   const date    = $('s-date').value;
   const hour    = $('s-hour').value;
   const players = parseInt($('s-players').value) || 0;
-  const rev     = parseFloat($('s-rev').value) || 0;
+  const payType = $('s-lockme').value;
+  const lockme  = payType === '1';
+  const isVoucher = payType === 'voucher';
+  const voucherId = isVoucher ? $('s-voucher-id')?.value : null;
   const disc    = parseFloat($('s-disc').value) || 0;
-  const lockme  = $('s-lockme').value === '1';
   const note    = $('s-note').value.trim();
 
-  if (!date || rev <= 0) {
-    toast('Podaj datę i przychód', 'err');
-    return;
+  // Revenue: voucher = 0 (already counted at sale), else from field
+  const rev = isVoucher ? 0 : (parseFloat($('s-rev').value) || 0);
+
+  if (!date) { toast('Podaj datę', 'err'); return; }
+  if (!isVoucher && rev <= 0) { toast('Podaj przychód', 'err'); return; }
+  if (isVoucher && !voucherId) { toast('Wybierz voucher', 'err'); return; }
+
+  // Find voucher and get its code
+  let voucherCode = '';
+  if (isVoucher && voucherId) {
+    const v = S.vouchers.find(x => x.id === voucherId);
+    if (!v) { toast('Nie znaleziono vouchera', 'err'); return; }
+    voucherCode = v.code;
   }
 
-  S.sessions.push({
+  const session = {
     id: uid(), date,
-    hour:     hour || '',
+    hour:      hour || '',
     players,
-    revenue:  rev,
-    discount: disc,
-    lockme:   lockme || undefined,
-    note
-  });
+    revenue:   rev,
+    discount:  disc,
+    note,
+    lockme:    lockme || undefined,
+    payment:   isVoucher ? 'voucher' : (lockme ? 'online' : 'on-site'),
+    ...(voucherId ? { voucherId, voucherCode } : {})
+  };
 
-  $('s-date').value    = '';
-  $('s-hour').value    = '';
-  $('s-players').value = '';
-  $('s-rev').value     = '';
-  $('s-disc').value    = '0';
-  $('s-lockme').value  = '0';
-  $('s-note').value    = '';
+  S.sessions.push(session);
+
+  // Mark voucher as used
+  if (isVoucher && voucherId) {
+    const v = S.vouchers.find(x => x.id === voucherId);
+    if (v) {
+      v.usedBy = date;
+      v.usedSessionId = session.id;
+    }
+  }
+
+  // Reset form
+  ['s-date','s-hour','s-players','s-rev','s-disc','s-note'].forEach(id => {
+    const el = $(id); if (el) el.value = id === 's-disc' ? '0' : '';
+  });
+  $('s-lockme').value = '0';
+  if ($('s-voucher-field')) $('s-voucher-field').style.display = 'none';
 
   toggleSessAdd();
   save();
   renderSessions();
-  toast('Dodano sesję');
+  toast(isVoucher ? `✓ Sesja z voucherem ${voucherCode}` : 'Dodano sesję');
 };
 
 window.editSession = function(idx) {
@@ -1663,6 +1700,197 @@ function parseCSV(text) {
   
   return sessions;
 }
+
+// ═══════════════════════════════════════════════════════════════
+//  VOUCHERY
+// ═══════════════════════════════════════════════════════════════
+
+// Auto-generuj numer: 001/2026
+function nextVoucherCode() {
+  const year = new Date().getFullYear();
+  const thisYear = S.vouchers.filter(v => v.code?.endsWith(`/${year}`));
+  const next = String(thisYear.length + 1).padStart(3, '0');
+  return `${next}/${year}`;
+}
+
+function voucherStatus(v) {
+  if (v.usedBy) return 'used';
+  if (v.expires && new Date(v.expires) < new Date(new Date().toDateString())) return 'expired';
+  return 'active';
+}
+
+const V_STATUS = {
+  active:  { label: 'Aktywny',       cls: 'src-online'  },
+  used:    { label: 'Wykorzystany',   cls: 'src-panel'   },
+  expired: { label: 'Wygasły',       cls: 'src-badge' }
+};
+
+function renderVouchers() {
+  const total    = S.vouchers.reduce((s, v) => s + (Number(v.value) || 0), 0);
+  const active   = S.vouchers.filter(v => voucherStatus(v) === 'active');
+  const used     = S.vouchers.filter(v => voucherStatus(v) === 'used');
+  const expired  = S.vouchers.filter(v => voucherStatus(v) === 'expired');
+  const activeVal = active.reduce((s, v) => s + (Number(v.value) || 0), 0);
+
+  set('v-total',      fmtPLN(total));
+  set('v-active',     `${active.length} (${fmtPLN(activeVal)})`);
+  set('v-used',       String(used.length));
+  set('v-expired',    String(expired.length));
+  set('v-active-val', fmtPLN(activeVal));
+
+  const list = $('voucher-list');
+  if (!list) return;
+
+  if (S.vouchers.length === 0) {
+    list.innerHTML = '<div class="empty"><div class="empty-ic">🎟</div><div class="empty-tx">Brak voucherów<br><button class="btn" style="margin-top:12px" onclick="addVoucher()">+ Sprzedaj pierwszy voucher</button></div></div>';
+    return;
+  }
+
+  const sorted = [...S.vouchers].sort((a, b) => (b.saleDate || '').localeCompare(a.saleDate || ''));
+
+  list.innerHTML = `
+    <table class="dt">
+      <thead>
+        <tr>
+          <th>Kod</th>
+          <th style="text-align:right">Wartość</th>
+          <th>Sprzedano</th>
+          <th>Ważny do</th>
+          <th>Kupujący</th>
+          <th>Status</th>
+          <th>Notatka</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        ${sorted.map(v => {
+          const idx = S.vouchers.indexOf(v);
+          const st = voucherStatus(v);
+          const { label, cls } = V_STATUS[st];
+          const usedInfo = v.usedBy
+            ? `<div style="font-size:10px;color:var(--txm)">sesja: ${v.usedBy}</div>`
+            : '';
+          return `
+            <tr style="${st !== 'active' ? 'opacity:.6' : ''}">
+              <td><b style="font-family:var(--fm);letter-spacing:.05em">${esc(v.code)}</b></td>
+              <td class="num">${fmtPLN(v.value || 0)}</td>
+              <td>${v.saleDate || '—'}</td>
+              <td>${v.expires || '—'}</td>
+              <td style="font-size:12px">${esc(v.buyer || '—')}</td>
+              <td>
+                <span class="src-badge ${cls}">${label}</span>
+                ${usedInfo}
+              </td>
+              <td style="font-size:11px;color:var(--txm)">${esc(v.note || '')}</td>
+              <td class="acell">
+                ${st === 'active' ? `<button class="btn bd" onclick="deleteVoucher(${idx})">✕</button>` : ''}
+              </td>
+            </tr>
+          `;
+        }).join('')}
+      </tbody>
+    </table>
+  `;
+}
+window.renderVouchers = renderVouchers;
+
+window.addVoucher = function() {
+  // Set default dates
+  const today = new Date().toISOString().split('T')[0];
+  const nextYear = new Date();
+  nextYear.setFullYear(nextYear.getFullYear() + 1);
+  const exp = nextYear.toISOString().split('T')[0];
+
+  const dateEl = $('v-date');
+  const expiresEl = $('v-expires');
+  if (dateEl && !dateEl.value) dateEl.value = today;
+  if (expiresEl && !expiresEl.value) expiresEl.value = exp;
+
+  toggleVoucherAdd();
+};
+
+window.toggleVoucherAdd = function() {
+  const el = $('voucher-add');
+  if (el) {
+    el.classList.toggle('open');
+    if (el.classList.contains('open')) $('v-value')?.focus();
+  }
+};
+
+window.saveVoucher = function() {
+  const value = parseFloat($('v-value')?.value) || 0;
+  const saleDate = $('v-date')?.value;
+  const expires = $('v-expires')?.value;
+  const buyer = $('v-buyer')?.value.trim();
+  const note = $('v-note')?.value.trim();
+
+  if (value <= 0) { toast('Podaj wartość vouchera', 'err'); return; }
+  if (!saleDate)  { toast('Podaj datę sprzedaży', 'err'); return; }
+
+  const code = nextVoucherCode();
+
+  S.vouchers.push({
+    id: uid(),
+    code,
+    value,
+    saleDate,
+    expires: expires || null,
+    buyer: buyer || '',
+    note: note || '',
+    usedBy: null,
+    createdAt: new Date().toISOString()
+  });
+
+  // Reset form
+  $('v-value').value = '';
+  $('v-date').value = '';
+  $('v-expires').value = '';
+  $('v-buyer').value = '';
+  $('v-note').value = '';
+  $('voucher-add').classList.remove('open');
+
+  save();
+  renderVouchers();
+  toast(`✓ Voucher ${code} sprzedany · ${fmtPLN(value)}`);
+};
+
+window.deleteVoucher = function(idx) {
+  if (!confirm('Usunąć ten voucher?')) return;
+  S.vouchers.splice(idx, 1);
+  save();
+  renderVouchers();
+  toast('Usunięto');
+};
+
+// Populate voucher dropdown in session form
+window.populateVoucherSelect = function() {
+  const sel = $('s-voucher-id');
+  if (!sel) return;
+  const active = S.vouchers.filter(v => voucherStatus(v) === 'active');
+  if (active.length === 0) {
+    sel.innerHTML = '<option value="">— brak aktywnych voucherów —</option>';
+    return;
+  }
+  sel.innerHTML = active.map(v =>
+    `<option value="${v.id}">${esc(v.code)} · ${fmtPLN(v.value)}${v.buyer ? ` · ${esc(v.buyer)}` : ''}</option>`
+  ).join('');
+};
+
+// Show/hide voucher dropdown based on payment selection
+window.onSessionPaymentChange = function() {
+  const val = $('s-lockme')?.value;
+  const field = $('s-voucher-field');
+  if (!field) return;
+  if (val === 'voucher') {
+    field.style.display = '';
+    populateVoucherSelect();
+    // Auto-set revenue to 0
+    const revEl = $('s-rev');
+    if (revEl && !revEl.value) revEl.value = '0';
+  } else {
+    field.style.display = 'none';
+  }
+};
 
 // ═══════════════════════════════════════════════════════════════
 //  DEBTS (Długi)
