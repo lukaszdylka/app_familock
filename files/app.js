@@ -1790,6 +1790,7 @@ function renderVouchers() {
             <tr class="voucher-edit-row" id="vedit-${idx}" style="display:none">
               <td colspan="8" style="padding:0">
                 <div class="sess-edit-inner" style="padding:10px">
+                  <div class="field" style="margin:0"><label>Nr vouchera</label><input id="ve-code-${idx}" value="${esc(v.code || '')}"/></div>
                   <div class="field" style="margin:0"><label>Wartość (zł)</label><input type="number" id="ve-value-${idx}" step="0.01" value="${v.value || ''}"/></div>
                   <div class="field" style="margin:0"><label>Sprzedano</label><input type="date" id="ve-sale-${idx}" value="${v.saleDate || ''}"/></div>
                   <div class="field" style="margin:0"><label>Ważny do</label><input type="date" id="ve-exp-${idx}" value="${v.expires || ''}"/></div>
@@ -1811,14 +1812,17 @@ function renderVouchers() {
 window.renderVouchers = renderVouchers;
 
 window.addVoucher = function() {
-  // Set default dates
   const today = new Date().toISOString().split('T')[0];
   const nextYear = new Date();
   nextYear.setFullYear(nextYear.getFullYear() + 1);
   const exp = nextYear.toISOString().split('T')[0];
 
-  const dateEl = $('v-date');
+  const codeEl   = $('v-code');
+  const dateEl   = $('v-date');
   const expiresEl = $('v-expires');
+
+  // Pre-fill code suggestion (editable)
+  if (codeEl) codeEl.value = nextVoucherCode();
   if (dateEl && !dateEl.value) dateEl.value = today;
   if (expiresEl && !expiresEl.value) expiresEl.value = exp;
 
@@ -1834,22 +1838,25 @@ window.toggleVoucherAdd = function() {
 };
 
 window.saveVoucher = function() {
-  const value = parseFloat($('v-value')?.value) || 0;
+  const code    = $('v-code')?.value.trim();
+  const value   = parseFloat($('v-value')?.value) || 0;
   const saleDate = $('v-date')?.value;
   const expires = $('v-expires')?.value;
-  const buyer = $('v-buyer')?.value.trim();
-  const note = $('v-note')?.value.trim();
+  const buyer   = $('v-buyer')?.value.trim();
+  const note    = $('v-note')?.value.trim();
 
+  if (!code)     { toast('Podaj numer vouchera', 'err'); return; }
   if (value <= 0) { toast('Podaj wartość vouchera', 'err'); return; }
   if (!saleDate)  { toast('Podaj datę sprzedaży', 'err'); return; }
 
-  const code = nextVoucherCode();
+  // Check for duplicate code
+  if (S.vouchers.some(v => v.code === code)) {
+    toast(`Voucher ${code} już istnieje`, 'err');
+    return;
+  }
 
   S.vouchers.push({
-    id: uid(),
-    code,
-    value,
-    saleDate,
+    id: uid(), code, value, saleDate,
     expires: expires || null,
     buyer: buyer || '',
     note: note || '',
@@ -1857,12 +1864,9 @@ window.saveVoucher = function() {
     createdAt: new Date().toISOString()
   });
 
-  // Reset form
-  $('v-value').value = '';
-  $('v-date').value = '';
-  $('v-expires').value = '';
-  $('v-buyer').value = '';
-  $('v-note').value = '';
+  ['v-code','v-value','v-date','v-expires','v-buyer','v-note'].forEach(id => {
+    const el = $(id); if (el) el.value = '';
+  });
   $('voucher-add').classList.remove('open');
 
   save();
@@ -1890,8 +1894,15 @@ window.editVoucher = function(idx) {
 window.updateVoucher = function(idx) {
   const v = S.vouchers[idx];
   if (!v) return;
+  const code  = $(`ve-code-${idx}`)?.value.trim();
   const value = parseFloat($(`ve-value-${idx}`)?.value) || 0;
+  if (!code)    { toast('Podaj numer vouchera', 'err'); return; }
   if (value <= 0) { toast('Podaj wartość', 'err'); return; }
+  // Duplicate code check (excluding self)
+  if (S.vouchers.some((x, i) => i !== idx && x.code === code)) {
+    toast(`Voucher ${code} już istnieje`, 'err'); return;
+  }
+  v.code     = code;
   v.value    = value;
   v.saleDate = $(`ve-sale-${idx}`)?.value || v.saleDate;
   v.expires  = $(`ve-exp-${idx}`)?.value || null;
