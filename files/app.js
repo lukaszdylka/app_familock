@@ -1771,7 +1771,7 @@ function renderVouchers() {
             ? `<div style="font-size:10px;color:var(--txm)">sesja: ${v.usedBy}</div>`
             : '';
           return `
-            <tr style="${st !== 'active' ? 'opacity:.6' : ''}">
+            <tr data-vidx="${idx}">
               <td><b style="font-family:var(--fm);letter-spacing:.05em">${esc(v.code)}</b></td>
               <td class="num">${fmtPLN(v.value || 0)}</td>
               <td>${v.saleDate || '—'}</td>
@@ -1782,8 +1782,24 @@ function renderVouchers() {
                 ${usedInfo}
               </td>
               <td style="font-size:11px;color:var(--txm)">${esc(v.note || '')}</td>
-              <td class="acell">
+              <td class="acell" style="display:flex;gap:4px">
+                <button class="btn be" onclick="editVoucher(${idx})">✎</button>
                 ${st === 'active' ? `<button class="btn bd" onclick="deleteVoucher(${idx})">✕</button>` : ''}
+              </td>
+            </tr>
+            <tr class="voucher-edit-row" id="vedit-${idx}" style="display:none">
+              <td colspan="8" style="padding:0">
+                <div class="sess-edit-inner" style="padding:10px">
+                  <div class="field" style="margin:0"><label>Wartość (zł)</label><input type="number" id="ve-value-${idx}" step="0.01" value="${v.value || ''}"/></div>
+                  <div class="field" style="margin:0"><label>Sprzedano</label><input type="date" id="ve-sale-${idx}" value="${v.saleDate || ''}"/></div>
+                  <div class="field" style="margin:0"><label>Ważny do</label><input type="date" id="ve-exp-${idx}" value="${v.expires || ''}"/></div>
+                  <div class="field" style="margin:0"><label>Kupujący</label><input id="ve-buyer-${idx}" value="${esc(v.buyer || '')}"/></div>
+                  <div class="field" style="margin:0"><label>Notatka</label><input id="ve-note-${idx}" value="${esc(v.note || '')}"/></div>
+                  <div style="display:flex;gap:5px;align-items:flex-end;padding-bottom:1px">
+                    <button class="btn bp bsm" onclick="updateVoucher(${idx})">Zapisz</button>
+                    <button class="btn bg bsm" onclick="editVoucher(${idx})">Anuluj</button>
+                  </div>
+                </div>
               </td>
             </tr>
           `;
@@ -1860,6 +1876,30 @@ window.deleteVoucher = function(idx) {
   save();
   renderVouchers();
   toast('Usunięto');
+};
+
+window.editVoucher = function(idx) {
+  const row = $(`vedit-${idx}`);
+  if (!row) return;
+  const isOpen = row.style.display !== 'none';
+  // Close all other edit rows
+  document.querySelectorAll('.voucher-edit-row').forEach(r => r.style.display = 'none');
+  row.style.display = isOpen ? 'none' : '';
+};
+
+window.updateVoucher = function(idx) {
+  const v = S.vouchers[idx];
+  if (!v) return;
+  const value = parseFloat($(`ve-value-${idx}`)?.value) || 0;
+  if (value <= 0) { toast('Podaj wartość', 'err'); return; }
+  v.value    = value;
+  v.saleDate = $(`ve-sale-${idx}`)?.value || v.saleDate;
+  v.expires  = $(`ve-exp-${idx}`)?.value || null;
+  v.buyer    = $(`ve-buyer-${idx}`)?.value.trim() || '';
+  v.note     = $(`ve-note-${idx}`)?.value.trim() || '';
+  save();
+  renderVouchers();
+  toast('Zaktualizowano');
 };
 
 // Populate voucher dropdown in session form
