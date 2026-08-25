@@ -1441,9 +1441,21 @@ window.editSession = function(idx) {
         <div class="field" style="margin:0"><label>Rabat (zł)</label><input type="number" id="se-disc" step="0.01" value="${s.discount || 0}"/></div>
         <div class="field" style="margin:0">
           <label>Płatność</label>
-          <select id="se-lockme">
-            <option value="0" ${!s.lockme ? 'selected' : ''}>Gotówka / terminal</option>
-            <option value="1" ${s.lockme  ? 'selected' : ''}>Online LockMe (−14%)</option>
+          <select id="se-lockme" onchange="onEditPaymentChange(${idx})">
+            <option value="0"     ${!s.lockme && s.payment !== 'voucher' ? 'selected' : ''}>Gotówka / terminal</option>
+            <option value="1"     ${s.lockme ? 'selected' : ''}>Online LockMe (−14%)</option>
+            <option value="voucher" ${s.payment === 'voucher' ? 'selected' : ''}>Voucher</option>
+          </select>
+        </div>
+        <div class="field" id="se-voucher-field-${idx}" style="margin:0;${s.payment === 'voucher' ? '' : 'display:none'}">
+          <label>Voucher</label>
+          <select id="se-voucher-id-${idx}">
+            ${(function() {
+              const active = S.vouchers.filter(v => voucherStatus(v) === 'active' || v.id === s.voucherId);
+              return active.map(v =>
+                `<option value="${v.id}" ${v.id === s.voucherId ? 'selected' : ''}>${esc(v.code)} · ${fmtPLN(v.value)}${v.buyer ? ` · ${esc(v.buyer)}` : ''}</option>`
+              ).join('');
+            })()}
           </select>
         </div>
         <div class="field" style="margin:0">
@@ -1478,19 +1490,44 @@ window.editSession = function(idx) {
 window.updateSession = function(idx) {
   const s = S.sessions[idx];
   if (!s) return;
-  const rev = parseFloat($('se-rev').value) || 0;
-  if (rev <= 0) { toast('Podaj przychód', 'err'); return; }
+  const payType   = $('se-lockme').value;
+  const isVoucher = payType === 'voucher';
+  const isLockme  = payType === '1';
+  const rev = isVoucher ? 0 : (parseFloat($('se-rev').value) || 0);
+  if (!isVoucher && rev <= 0) { toast('Podaj przychód', 'err'); return; }
+
+  // Handle voucher change — unmark old voucher if changed
+  if (s.voucherId && (!isVoucher || $(`se-voucher-id-${idx}`)?.value !== s.voucherId)) {
+    const oldV = S.vouchers.find(v => v.id === s.voucherId);
+    if (oldV) { oldV.usedBy = null; oldV.usedSessionId = null; }
+  }
+
   s.date     = $('se-date').value;
   s.hour     = $('se-hour').value || '';
   s.players  = parseInt($('se-players').value) || 0;
   s.revenue  = rev;
   s.discount = parseFloat($('se-disc').value) || 0;
   s.note     = $('se-note').value.trim();
-  s.lockme   = $('se-lockme').value === '1';
+  s.lockme   = isLockme;
   s.source   = $('se-source')?.value || '';
   s.email    = $('se-email')?.value.trim() || '';
   s.phone    = $('se-phone')?.value.trim() || '';
   s.test     = $('se-test')?.checked || false;
+
+  if (isVoucher) {
+    const vId = $(`se-voucher-id-${idx}`)?.value;
+    const v = S.vouchers.find(x => x.id === vId);
+    s.payment     = 'voucher';
+    s.voucherId   = vId || null;
+    s.voucherCode = v?.code || '';
+    s.revenue     = 0;
+    if (v) { v.usedBy = s.date; v.usedSessionId = s.id; }
+  } else {
+    s.payment     = isLockme ? 'online' : 'on-site';
+    s.voucherId   = null;
+    s.voucherCode = null;
+  }
+
   save();
   renderSessions();
   toast('Zaktualizowano sesję');
@@ -1722,7 +1759,14 @@ function voucherStatus(v) {
 const V_STATUS = {
   active:  { label: 'Aktywny',       cls: 'src-online'  },
   used:    { label: 'Wykorzystany',   cls: 'src-panel'   },
-  expired: { label: 'Wygasły',       cls: 'src-badge' }
+  expired: { label: 'Wygasły',       cls: 'src-badge'   }
+};
+
+const voucherBadge = (v) => {
+  const st = voucherStatus(v);
+  const { label, cls } = V_STATUS[st];
+  const isFree = (Number(v.value) || 0) === 0;
+  return `<span class="src-badge ${cls}">${label}</span>${isFree ? ' <span class="src-badge src-onsite">Gratisowy</span>' : ''}`;
 };
 
 function renderVouchers() {
@@ -1766,7 +1810,6 @@ function renderVouchers() {
         ${sorted.map(v => {
           const idx = S.vouchers.indexOf(v);
           const st = voucherStatus(v);
-          const { label, cls } = V_STATUS[st];
           const usedInfo = v.usedBy
             ? `<div style="font-size:10px;color:var(--txm)">sesja: ${v.usedBy}</div>`
             : '';
@@ -1778,7 +1821,7 @@ function renderVouchers() {
               <td>${v.expires || '—'}</td>
               <td style="font-size:12px">${esc(v.buyer || '—')}</td>
               <td>
-                <span class="src-badge ${cls}">${label}</span>
+                ${voucherBadge(v)}
                 ${usedInfo}
               </td>
               <td style="font-size:11px;color:var(--txm)">${esc(v.note || '')}</td>
@@ -1845,8 +1888,8 @@ window.saveVoucher = function() {
   const buyer   = $('v-buyer')?.value.trim();
   const note    = $('v-note')?.value.trim();
 
-  if (!code)     { toast('Podaj numer vouchera', 'err'); return; }
-  if (value <= 0) { toast('Podaj wartość vouchera', 'err'); return; }
+  if (!code)      { toast('Podaj numer vouchera', 'err'); return; }
+  if (value < 0)  { toast('Wartość nie może być ujemna', 'err'); return; }
   if (!saleDate)  { toast('Podaj datę sprzedaży', 'err'); return; }
 
   // Check for duplicate code
@@ -1896,8 +1939,8 @@ window.updateVoucher = function(idx) {
   if (!v) return;
   const code  = $(`ve-code-${idx}`)?.value.trim();
   const value = parseFloat($(`ve-value-${idx}`)?.value) || 0;
-  if (!code)    { toast('Podaj numer vouchera', 'err'); return; }
-  if (value <= 0) { toast('Podaj wartość', 'err'); return; }
+  if (!code)     { toast('Podaj numer vouchera', 'err'); return; }
+  if (value < 0) { toast('Wartość nie może być ujemna', 'err'); return; }
   // Duplicate code check (excluding self)
   if (S.vouchers.some((x, i) => i !== idx && x.code === code)) {
     toast(`Voucher ${code} już istnieje`, 'err'); return;
@@ -1925,6 +1968,13 @@ window.populateVoucherSelect = function() {
   sel.innerHTML = active.map(v =>
     `<option value="${v.id}">${esc(v.code)} · ${fmtPLN(v.value)}${v.buyer ? ` · ${esc(v.buyer)}` : ''}</option>`
   ).join('');
+};
+
+window.onEditPaymentChange = function(idx) {
+  const val = $(`se-lockme`)?.value;
+  const field = $(`se-voucher-field-${idx}`);
+  if (!field) return;
+  field.style.display = val === 'voucher' ? '' : 'none';
 };
 
 // Show/hide voucher dropdown based on payment selection
