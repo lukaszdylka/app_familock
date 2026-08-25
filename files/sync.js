@@ -115,6 +115,7 @@ async function pullFromCloud() {
         if (!cloudData.otc)    cloudData.otc = [];
         if (!cloudData.tasks)  cloudData.tasks = [];
         if (!cloudData.debts)  cloudData.debts = [];
+        if (!cloudData.vouchers) cloudData.vouchers = [];
 
         if (cloudData.otc?.length > 0 && cloudData.remont.length === 0) {
           cloudData.remont = cloudData.otc;
