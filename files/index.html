@@ -7,6 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Space+Mono:wght@400;700&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet"/>
 <link rel="stylesheet" href="style.css"/>
+<script>window.FAMILOCK_READ_ONLY = true;</script>
 <!-- PDF.js for invoice parsing -->
 <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
 <script>
@@ -87,6 +88,7 @@
 </div></div>
 
 <main class="main">
+<div class="readonly-banner" role="status"><b>Archiwalny podgląd tylko do odczytu.</b> Dane edytuj w <a href="https://manager.familock.pl/">Managerze Familock</a>.</div>
 
 <!-- ══ DASHBOARD ══════════════════════════════════════════════════ -->
 <div class="pg on" id="pg-dash">
@@ -509,5 +511,6 @@
 <!-- Invoice parser integrated in app.js -->
 <script src="sync.js"></script>
 <script src="app.js"></script>
+<script src="readonly.js"></script>
 </body>
 </html>

@@ -63,6 +63,10 @@ async function initSupabase() {
 
 // ── Push local data to cloud ──
 async function pushToCloud() {
+  if (window.FAMILOCK_READ_ONLY) {
+    console.info('Archiwalny podgląd: zapis do chmury jest wyłączony.');
+    return false;
+  }
   if (!currentUser || !supabaseClient || !window.S) return false;
 
   try {
@@ -143,13 +147,9 @@ async function pullFromCloud() {
         if (window.toast) window.toast('📥 Pobrano dane z chmury');
       } else {
         console.log('📱 Local data is current');
-        // Still push local to cloud if cloud is empty
-        if (!data) await pushToCloud();
       }
     } else {
-      // No cloud data yet → push local data to cloud
-      console.log('☁️ No cloud data, pushing local...');
-      await pushToCloud();
+      console.log('☁️ No cloud data available for archived preview.');
     }
   } catch (error) {
     console.error('Pull error:', error);

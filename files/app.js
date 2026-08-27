@@ -213,6 +213,10 @@ let _cloudPushTimer = null;
 let _cloudPushPending = false;
 
 async function save() {
+  if (window.FAMILOCK_READ_ONLY) {
+    toast('Archiwalny podgląd. Dane edytuj w Managerze.', 'err');
+    return false;
+  }
   try {
     localStorage.setItem('fl4', JSON.stringify(S));
     console.log('💾 Saved to localStorage');

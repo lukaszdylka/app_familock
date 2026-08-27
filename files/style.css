@@ -1798,6 +1798,19 @@ hr.div {
 }
 
 /* ── Source & payment badges ── */
+.readonly-banner {
+  margin: 0 0 16px;
+  padding: 12px 14px;
+  border: 1px solid rgba(234,179,8,.45);
+  border-radius: 10px;
+  background: rgba(234,179,8,.1);
+  color: var(--tx);
+  font-size: 13px;
+  line-height: 1.45;
+}
+.readonly-banner a { color: var(--ac2); font-weight: 700; }
+#main-app :disabled { cursor: not-allowed; }
+
 .src-badge {
   display: inline-block;
   font-size: 10px;
